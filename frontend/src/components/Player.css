@@ -1,0 +1,32 @@
+.player-wrapper {
+	width: 100%;
+	overflow: hidden;
+	background: transparent;
+	border: none;
+	position: relative;
+}
+
+/* Keep the media element mounted for MSE, but hide native controls. */
+.player-media {
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+	position: absolute;
+	left: 0;
+	top: 0;
+}
+
+audio {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+video {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+/* No native control styling; we provide our own controls. */

@@ -1,0 +1,181 @@
+.now-playing {
+	display: flex;
+	flex-direction: column;
+}
+
+.cover-art {
+	width: 100%;
+	aspect-ratio: 1;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	background: transparent;
+}
+
+.cover-art__img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.cover-art__img.is-loading {
+	opacity: 0;
+}
+
+.cover-art__placeholder {
+	position: absolute;
+	inset: 0;
+	border-radius: 0;
+	background: transparent;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.cover-art__spinner {
+	width: 28px;
+	height: 28px;
+	border-radius: 999px;
+	border: 3px solid rgba(0, 0, 0, 0.16);
+	border-top-color: rgba(0, 0, 0, 0.42);
+	animation: spin 0.9s linear infinite;
+}
+
+.now-playing__skeletonText {
+	padding: 2px 0;
+}
+
+.skeleton-block,
+.skeleton-line {
+	background: linear-gradient(
+		90deg,
+		rgba(0, 0, 0, 0.06) 0%,
+		rgba(0, 0, 0, 0.12) 40%,
+		rgba(0, 0, 0, 0.06) 80%
+	);
+	background-size: 240px 100%;
+	animation: shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-line {
+	border-radius: 8px;
+}
+
+.skeleton-line--title {
+	width: min(440px, 92%);
+	height: 28px;
+	margin-bottom: 12px;
+}
+
+.skeleton-line--artist {
+	width: min(260px, 60%);
+	height: 18px;
+	margin-bottom: 8px;
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: -240px 0;
+	}
+	100% {
+		background-position: 240px 0;
+	}
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.track-info {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 0 14px;
+}
+
+.track-info__left {
+	flex: 0 0 auto;
+}
+
+.track-info__text {
+	flex: 1 1 auto;
+	text-align: left;
+	min-width: 0;
+}
+
+.track-info__right {
+	flex: 0 0 auto;
+	margin-left: auto;
+	display: flex;
+	justify-content: flex-end;
+}
+
+.track-title {
+	font-size: 28px;
+	font-weight: 800;
+	color: #1a1a1a;
+	margin-bottom: 12px;
+	word-break: break-word;
+}
+
+.track-artist {
+	font-size: 18px;
+	font-weight: 800;
+	color: #666;
+	margin-bottom: 8px;
+}
+
+.album-info {
+	font-size: 12px;
+	color: #999;
+	line-height: 1.4;
+}
+
+.progress-bar {
+	width: auto;
+	height: 12px;
+	margin-bottom: 14px;
+	background: repeating-linear-gradient(
+		45deg,
+		#ccc 0px,
+		#ccc 12px,
+		#aaa 12px,
+		#aaa 24px
+	);
+}
+
+.progress-fill {
+	height: 100%;
+	position: relative;
+	overflow: hidden; /* window that clips the fixed-width stripe layer */
+	transition: width 0.1s linear;
+}
+
+.progress-fill::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 200vw; /* fixed to viewport; avoids sub-pixel relayout jitter */
+	background: repeating-linear-gradient(
+		45deg,
+		#ffd200 0px,
+		#ffd200 12px,
+		#ff0080 12px,
+		#ff0080 24px
+	);
+	pointer-events: none;
+}
+
+.now-playing-controls {
+	display: flex;
+	justify-content: center;
+	padding: 6px 0 0;
+	width: 100%;
+}

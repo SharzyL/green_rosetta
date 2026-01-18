@@ -1,0 +1,7 @@
+.direnv
+/target
+result*
+.idea
+/test_dir
+/backend.config.toml
+/generator.config.toml

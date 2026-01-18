@@ -1,0 +1,83 @@
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	width: 100%;
+	height: 100%;
+}
+
+#root {
+	padding: 0px 20px;
+	position: relative;
+	z-index: 0;
+}
+
+body {
+	font-family:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+		"Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	background: none;
+	min-height: 100vh;
+	position: relative;
+	z-index: 0;
+}
+
+:root {
+	/* Halftone background tuning (used by `src/lib/halftoneBackground.ts`). */
+	--halftone-step-px: 20;
+	--halftone-r-min-px: 2;
+	--halftone-r-max-px: 13;
+	--halftone-opacity-top: 1;
+	--halftone-opacity-bottom: 1;
+	/* When true: large at top, small at bottom. */
+	--halftone-invert: false;
+	/* Dot grid rotation in degrees. Dot radius still depends only on y. */
+	--halftone-angle-deg: 45;
+	--halftone-dot-color: black;
+}
+
+/* Full-screen canvas for halftone dots (fixed; never scrolls). */
+#halftone-bg {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: -1;
+	pointer-events: none;
+}
+
+/* Keep the background fixed during scroll (avoid background-attachment: fixed issues). */
+body::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+
+	/* Base layer: hot-pink field with subtle tonal variation */
+	background:
+		radial-gradient(
+			1200px 900px at 18% 12%,
+			rgba(255, 210, 32, 0.18),
+			transparent 55%
+		),
+		radial-gradient(
+			900px 700px at 88% 28%,
+			rgba(255, 255, 255, 0.14),
+			transparent 50%
+		),
+		rgba(255, 0, 128, 1);
+
+	z-index: -2;
+	pointer-events: none;
+}
+
+code {
+	font-family:
+		source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}

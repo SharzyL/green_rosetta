@@ -1,0 +1,79 @@
+# Example backend config for Green Rosetta.
+#
+# Copy to the project root as `backend.config.toml` (this file is gitignored):
+#   cp docs/backend.config.toml ./backend.config.toml
+#
+# Notes:
+# - `server.host` / `server.port` are optional if you pass `--listen host:port`.
+# - Admin auth is required: set either `[admin].username/password_hash` or the env vars
+#   `SCRUTINIZER_USERNAME` and `SCRUTINIZER_PASSWORD_HASH`.
+
+[server]
+# Optional public base URL.
+#
+# Streaming works with relative URLs, so this is not required. It is used for small conveniences
+# like deciding whether to mark cookies as Secure (https://).
+base_url = "http://127.0.0.1:8080"
+
+# Optional listen host/port (ignored when `--listen` is provided).
+host = "0.0.0.0"
+port = 8080
+
+[storage]
+# "local" or "s3"
+backend = "local"
+
+# Local root directory that contains:
+# - {base_path}/metadata/*.yaml
+# - {base_path}/media/...
+base_path = "./data"
+
+# S3 mode: the backend loads metadata from `s3://{bucket}/metadata/*.yaml`,
+# and the MPD references segments via `public_access_domain`.
+#
+# [storage.s3]
+# endpoint = "https://s3.amazonaws.com"
+# bucket = "my-bucket"
+# region = "us-east-1"
+# public_access_domain = "https://cdn.example.com"
+# access_key_id = "..."
+# secret_access_key can be omitted and provided via env AWS_SECRET_ACCESS_KEY
+# secret_access_key = "..."
+
+[streaming]
+# DVR window size (seconds).
+time_shift_buffer_depth = 60.0
+
+# How far behind the live edge clients should start (seconds).
+suggested_presentation_delay = 30.0
+
+# How much future timeline to include past "now" (seconds).
+# Must be > time_shift_buffer_depth for smooth transitions.
+min_future_manifest_duration = 60.0
+
+[cors]
+# If empty, CORS is disabled (same-origin only).
+# If it contains "*", all origins are allowed.
+allowed_origins = ["http://localhost:3000"]
+
+[admin]
+# Admin credentials are required (otherwise the backend exits with an error).
+#
+# Generate a bcrypt password hash:
+#   green-rosetta-backend --hash-password
+#
+# Or provide creds via env:
+#   SCRUTINIZER_USERNAME=admin
+#   SCRUTINIZER_PASSWORD_HASH='$2b$12$...'
+username = "admin"
+password_hash = "$2b$12$REPLACE_ME_WITH_A_BCRYPT_HASH"
+
+# Global process-wide limits for `/api/admin/*`.
+rate_limit_per_second = 5
+max_concurrency = 8
+
+# Admin session cookie TTL (seconds).
+session_ttl_seconds = 86400
+
+[logging]
+level = "info"

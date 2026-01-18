@@ -1,0 +1,36 @@
+# Example generator config for Green Rosetta.
+#
+# Copy to the project root as `generator.config.toml` (this file is gitignored):
+#   cp docs/generator.config.toml ./generator.config.toml
+#
+# The generator expands `audio.adaption_sets` into multiple DASH Representations (bitrates)
+# grouped into an AdaptationSet.
+
+[streaming]
+# Segment duration used by ffmpeg dash muxer (-seg_duration / -frag_duration).
+segment_duration = 6.0
+
+[audio]
+# New-style config: describe adaptation sets, each with one codec and multiple bitrates.
+#
+# Each entry becomes one AdaptationSet in the MPD, with one Representation per bitrate.
+# Mixing codecs across sets (AAC + Opus) is supported.
+[[audio.adaption_sets]]
+codec = "aac"
+bitrates = ["96k", "128k", "192k"]
+sample_rate = 48000
+channels = 2
+
+[[audio.adaption_sets]]
+codec = "opus"
+bitrates = ["64k", "96k", "128k"]
+sample_rate = 48000
+channels = 2
+
+# Legacy config (optional): a flat list of profiles (still supported).
+# [[audio.profiles]]
+# name = "aac_128k"
+# codec = "aac"
+# bitrate = "128k"
+# sample_rate = 48000
+# channels = 2
