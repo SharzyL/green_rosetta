@@ -8,7 +8,7 @@ mod streaming;
 use anyhow::Result;
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     middleware::{from_fn_with_state, Next},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -94,6 +94,89 @@ async fn scheduler_advance_middleware(
     next.run(req).await
 }
 
+async fn cache_headers_middleware(
+    _state: State<AppState>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let path = req.uri().path().to_string();
+    let res = next.run(req).await;
+
+    // Only attach caching headers for successful responses (including partial content).
+    let status = res.status();
+    let ok = status.is_success() || status == StatusCode::PARTIAL_CONTENT;
+    if !ok {
+        return res;
+    }
+
+    let has_cache_control = res.headers().contains_key(header::CACHE_CONTROL);
+
+    let mut res = res;
+
+    // Helper to overwrite Cache-Control.
+    let set_cc = |res: &mut Response, value: &'static str| {
+        res.headers_mut()
+            .insert(header::CACHE_CONTROL, value.parse().unwrap());
+    };
+
+    // Explicit policies by route group.
+    if path == "/stream/manifest.mpd" {
+        // Dynamic MPD: always revalidate.
+        set_cc(&mut res, "no-cache");
+        return res;
+    }
+
+    if path.starts_with("/api/utc") || path.starts_with("/api/sync/time") {
+        // These handlers already set Cache-Control: no-store, but keep a safe fallback.
+        if !has_cache_control {
+            set_cc(&mut res, "no-store");
+        }
+        return res;
+    }
+
+    if path.starts_with("/api/admin/") {
+        // Authenticated + mutable state.
+        set_cc(&mut res, "no-store");
+        return res;
+    }
+
+    if path.starts_with("/api/tracks/") || path.starts_with("/api/albums/") {
+        // Metadata is stable enough to cache briefly.
+        if !has_cache_control {
+            set_cc(&mut res, "public, max-age=300");
+        }
+        return res;
+    }
+
+    if path.starts_with("/media/") {
+        // Static files (segments/covers) are content-addressed by path; cache aggressively.
+        if !has_cache_control {
+            set_cc(&mut res, "public, max-age=31536000, immutable");
+        }
+        return res;
+    }
+
+    // Frontend static assets (when running with --web-dir).
+    if path.starts_with("/assets/") {
+        if !has_cache_control {
+            set_cc(&mut res, "public, max-age=31536000, immutable");
+        }
+        return res;
+    }
+
+    // HTML entrypoints can be cached briefly, but should revalidate frequently so deployments
+    // pick up changes without long stale windows.
+    let is_html_route = path == "/" || path.ends_with('/') || path.ends_with(".html");
+    if is_html_route {
+        if !has_cache_control {
+            set_cc(&mut res, "public, max-age=60, must-revalidate");
+        }
+        return res;
+    }
+
+    res
+}
+
 async fn admin_auth_middleware(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -177,7 +260,8 @@ async fn manifest(
 
     let mut headers = HeaderMap::new();
     headers.insert("Content-Type", "application/dash+xml".parse().unwrap());
-    headers.insert("Cache-Control", "max-age=2".parse().unwrap());
+    // Dynamic MPD: avoid stale manifests through proxies.
+    headers.insert("Cache-Control", "no-cache".parse().unwrap());
 
     Ok((headers, mpd))
 }
@@ -535,10 +619,14 @@ async fn main() -> Result<()> {
         app.layer(cors)
     }
     .layer(from_fn_with_state(
+        middleware_state.clone(),
+        cache_headers_middleware,
+    ))
+    .layer(from_fn_with_state(
         middleware_state,
         scheduler_advance_middleware,
     ))
-        .with_state(state);
+    .with_state(state);
 
     // Run server
     tracing::info!("Server listening on {}", addr);
