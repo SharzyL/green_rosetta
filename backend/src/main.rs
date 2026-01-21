@@ -7,12 +7,12 @@ mod streaming;
 
 use anyhow::Result;
 use axum::{
+    Router,
     extract::State,
-    http::{header, HeaderMap, StatusCode},
-    middleware::{from_fn_with_state, Next},
+    http::{HeaderMap, StatusCode, header},
+    middleware::{Next, from_fn_with_state},
     response::{IntoResponse, Response},
     routing::{get, post, put},
-    Router,
 };
 use clap::Parser;
 use std::convert::Infallible;
@@ -284,7 +284,11 @@ fn apply_env_overrides(config: &mut config::Config) -> Result<()> {
 
     // Convenience: allow S3 credentials via env.
     if let Some(s3) = config.storage.s3.as_mut() {
-        if s3.access_key_id.as_ref().is_none_or(|v| v.trim().is_empty()) {
+        if s3
+            .access_key_id
+            .as_ref()
+            .is_none_or(|v| v.trim().is_empty())
+        {
             if let Ok(v) = std::env::var("AWS_ACCESS_KEY_ID") {
                 if !v.trim().is_empty() {
                     s3.access_key_id = Some(v);
@@ -473,16 +477,13 @@ async fn main() -> Result<()> {
             .as_deref()
             .map(str::trim)
             .filter(|h| !h.is_empty())
-            .ok_or_else(|| {
-                anyhow::anyhow!("server.host is not set; pass --listen host:port")
-            })?;
-        let port = config.server.port.ok_or_else(|| {
-            anyhow::anyhow!("server.port is not set; pass --listen host:port")
-        })?;
+            .ok_or_else(|| anyhow::anyhow!("server.host is not set; pass --listen host:port"))?;
+        let port = config
+            .server
+            .port
+            .ok_or_else(|| anyhow::anyhow!("server.port is not set; pass --listen host:port"))?;
         let port = if port == 0 {
-            return Err(anyhow::anyhow!(
-                "server.port is 0; pass --listen host:port"
-            ));
+            return Err(anyhow::anyhow!("server.port is 0; pass --listen host:port"));
         } else {
             port
         };
@@ -494,11 +495,9 @@ async fn main() -> Result<()> {
     // MPD availabilityStartTime is fixed at init; the scheduler maintains a sliding window
     // [t_now - TSBD, t_now + min_future_manifest_duration].
     let db = Arc::new(tokio::sync::RwLock::new(db_loaded));
-    let scheduler = scheduler::Scheduler::new(
-        db.clone(),
-        config.streaming.suggested_presentation_delay,
-    )
-    .await?;
+    let scheduler =
+        scheduler::Scheduler::new(db.clone(), config.streaming.suggested_presentation_delay)
+            .await?;
 
     let state = AppState {
         config: Arc::new(config),
@@ -530,7 +529,10 @@ async fn main() -> Result<()> {
     let admin_protected = Router::new()
         .route("/me", get(api::admin_me))
         .route("/albums", get(api::admin_albums))
-        .route("/albums/{album_id}/enabled", put(api::admin_set_album_enabled))
+        .route(
+            "/albums/{album_id}/enabled",
+            put(api::admin_set_album_enabled),
+        )
         .route_layer(from_fn_with_state(admin_state, admin_auth_middleware));
 
     let admin_routes = admin_public
@@ -539,7 +541,9 @@ async fn main() -> Result<()> {
             middleware_state.clone(),
             admin_rate_limit_middleware,
         ))
-        .layer(ConcurrencyLimitLayer::new(state.config.admin.max_concurrency));
+        .layer(ConcurrencyLimitLayer::new(
+            state.config.admin.max_concurrency,
+        ));
 
     app = app.nest("/api/admin", admin_routes);
 
@@ -573,7 +577,9 @@ async fn main() -> Result<()> {
                     );
                 }
                 if path.starts_with("/404/") {
-                    return Ok::<_, Infallible>((StatusCode::NOT_FOUND, "Not Found").into_response());
+                    return Ok::<_, Infallible>(
+                        (StatusCode::NOT_FOUND, "Not Found").into_response(),
+                    );
                 }
 
                 let wants_html = req
@@ -614,7 +620,10 @@ async fn main() -> Result<()> {
             CorsLayer::new().allow_origin(AllowOrigin::list(parsed))
         }
         .allow_methods([axum::http::Method::GET, axum::http::Method::PUT])
-        .allow_headers([axum::http::header::AUTHORIZATION, axum::http::header::CONTENT_TYPE]);
+        .allow_headers([
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::CONTENT_TYPE,
+        ]);
 
         app.layer(cors)
     }

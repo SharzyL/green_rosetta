@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use crate::config::{bitrate_to_bps, mpd_codecs_for_profile, AudioProfile};
+use crate::config::{AudioProfile, bitrate_to_bps, mpd_codecs_for_profile};
 use crate::scan::AlbumInfo;
 
 /// Generate a random 10-digit hex string

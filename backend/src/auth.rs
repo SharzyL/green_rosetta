@@ -1,5 +1,5 @@
 use anyhow::Result;
-use axum::http::{header, HeaderMap};
+use axum::http::{HeaderMap, header};
 use base64::Engine;
 use rand::RngCore;
 use std::collections::HashMap;
@@ -42,7 +42,11 @@ impl AdminSessions {
     }
 }
 
-pub(crate) fn verify_admin_password(config: &Config, username: &str, password: &str) -> Result<bool> {
+pub(crate) fn verify_admin_password(
+    config: &Config,
+    username: &str,
+    password: &str,
+) -> Result<bool> {
     let expected_user = config
         .admin
         .username

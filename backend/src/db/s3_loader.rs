@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use s3::creds::Credentials;
 use s3::{Bucket, Region};
 
@@ -18,9 +18,7 @@ fn region_from_config(cfg: &config::S3StorageConfig) -> Result<Region> {
         .map_err(|e| anyhow!("Invalid storage.s3.region '{}': {}", cfg.region, e))
 }
 
-pub async fn load_database_from_s3(
-    cfg: &config::S3StorageConfig,
-) -> Result<Database> {
+pub async fn load_database_from_s3(cfg: &config::S3StorageConfig) -> Result<Database> {
     if cfg.bucket.trim().is_empty() {
         return Err(anyhow!("storage.s3.bucket must be non-empty"));
     }
@@ -41,14 +39,8 @@ pub async fn load_database_from_s3(
     })?;
 
     let region = region_from_config(cfg)?;
-    let creds = Credentials::new(
-        Some(&access_key_id),
-        Some(&secret),
-        None,
-        None,
-        None,
-    )
-    .context("Create S3 credentials")?;
+    let creds = Credentials::new(Some(&access_key_id), Some(&secret), None, None, None)
+        .context("Create S3 credentials")?;
 
     let bucket = Bucket::new(&cfg.bucket, region, creds).context("Create S3 bucket client")?;
 
@@ -61,11 +53,7 @@ pub async fn load_database_from_s3(
     for page in listing {
         for obj in page.contents {
             let key = obj.key;
-            let ext = key
-                .rsplit('.')
-                .next()
-                .unwrap_or("")
-                .to_ascii_lowercase();
+            let ext = key.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
             if ext != "yaml" && ext != "yml" {
                 continue;
             }
@@ -88,7 +76,11 @@ pub async fn load_database_from_s3(
     }
 
     if albums.is_empty() {
-        return Err(anyhow!("No album YAML files found under s3://{}/{}", cfg.bucket, prefix));
+        return Err(anyhow!(
+            "No album YAML files found under s3://{}/{}",
+            cfg.bucket,
+            prefix
+        ));
     }
 
     Ok(Database { albums })

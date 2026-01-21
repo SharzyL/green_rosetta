@@ -233,7 +233,11 @@ fn test_playlist_wrapping_logic() {
             "  {}: {} {}",
             i + 1,
             album,
-            if *album == current { "<-- SKIP (BUG!)" } else { "" }
+            if *album == current {
+                "<-- SKIP (BUG!)"
+            } else {
+                ""
+            }
         );
 
         // This is the bug - we skip when album == current

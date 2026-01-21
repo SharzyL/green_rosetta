@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::process::Command;
@@ -100,20 +100,12 @@ impl AudioProcessor {
         if let Some((idx, total)) = progress {
             println!(
                 "[{} | {}] [{}/{}] {} - Duration: {:.1}s",
-                album_id,
-                album.name,
-                idx,
-                total,
-                track.title,
-                duration,
+                album_id, album.name, idx, total, track.title, duration,
             );
         } else {
             println!(
                 "[{} | {}] {} - Duration: {:.1}s",
-                album_id,
-                album.name,
-                track.title,
-                duration,
+                album_id, album.name, track.title, duration,
             );
         }
 

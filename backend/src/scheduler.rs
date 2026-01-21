@@ -30,37 +30,44 @@ impl Scheduler {
         db: Arc<tokio::sync::RwLock<Database>>,
         suggested_presentation_delay_seconds: f64,
     ) -> anyhow::Result<Self> {
-        let (first_album_id, first_album_name, _first_album_artist, first_track_id, first_track_artist, first_track_title, first_track_duration) =
-            {
-                let db_read = db.read().await;
-                let enabled_albums = db_read.get_enabled_albums();
-                if enabled_albums.is_empty() {
-                    return Err(anyhow::anyhow!("No enabled albums in database"));
-                }
+        let (
+            first_album_id,
+            first_album_name,
+            _first_album_artist,
+            first_track_id,
+            first_track_artist,
+            first_track_title,
+            first_track_duration,
+        ) = {
+            let db_read = db.read().await;
+            let enabled_albums = db_read.get_enabled_albums();
+            if enabled_albums.is_empty() {
+                return Err(anyhow::anyhow!("No enabled albums in database"));
+            }
 
-                // Randomly select starting album, then start at its first track.
-                let mut rng = rand::thread_rng();
-                let first_album = enabled_albums
-                    .choose(&mut rng)
-                    .ok_or_else(|| anyhow::anyhow!("Failed to select random album"))?;
-                let first_track = first_album
-                    .tracks
-                    .first()
-                    .ok_or_else(|| anyhow::anyhow!("Album has no tracks"))?;
+            // Randomly select starting album, then start at its first track.
+            let mut rng = rand::thread_rng();
+            let first_album = enabled_albums
+                .choose(&mut rng)
+                .ok_or_else(|| anyhow::anyhow!("Failed to select random album"))?;
+            let first_track = first_album
+                .tracks
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("Album has no tracks"))?;
 
-                (
-                    first_album.id.clone(),
-                    first_album.name.clone(),
-                    first_album.artist.clone(),
-                    first_track.id.clone(),
-                    first_track
-                        .artist
-                        .clone()
-                        .unwrap_or_else(|| first_album.artist.clone()),
-                    first_track.title.clone(),
-                    first_track.encoded_duration_seconds(),
-                )
-            };
+            (
+                first_album.id.clone(),
+                first_album.name.clone(),
+                first_album.artist.clone(),
+                first_track.id.clone(),
+                first_track
+                    .artist
+                    .clone()
+                    .unwrap_or_else(|| first_album.artist.clone()),
+                first_track.title.clone(),
+                first_track.encoded_duration_seconds(),
+            )
+        };
 
         tracing::info!(
             "🎵 Starting playback (random): {} - {} (Album: {})",
@@ -184,8 +191,9 @@ impl Scheduler {
                 .ok_or_else(|| anyhow::anyhow!("Schedule queue is empty"))?
         };
 
-        let (next_album_id, next_track_id) =
-            self.next_track_in_playlist(&last.album_id, &last.track_id).await?;
+        let (next_album_id, next_track_id) = self
+            .next_track_in_playlist(&last.album_id, &last.track_id)
+            .await?;
         let (_album, track) = self.get_album_track(&next_album_id, &next_track_id).await?;
 
         let duration = track.encoded_duration_seconds();
@@ -218,7 +226,9 @@ impl Scheduler {
         loop {
             let needs_more = {
                 let q = self.queue.read().await;
-                q.back().map(|t| t.end_seconds() < window_end).unwrap_or(true)
+                q.back()
+                    .map(|t| t.end_seconds() < window_end)
+                    .unwrap_or(true)
             };
             if !needs_more {
                 break;

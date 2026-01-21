@@ -106,9 +106,11 @@ created_at = "2024-01-01T00:00:00Z"
 
         // Verify paths include disc_number
         assert!(track.init_segment_path.contains("disc_1/track_1/init.mp4"));
-        assert!(track
-            .segment_path_template
-            .contains("disc_1/track_1/chunk_%03d$.m4s"));
+        assert!(
+            track
+                .segment_path_template
+                .contains("disc_1/track_1/chunk_%03d$.m4s")
+        );
     }
 
     #[test]
@@ -264,15 +266,21 @@ created_at = "2024-01-01T00:00:00Z"
         assert!(album.tracks[2].init_segment_path.contains("disc_3/track_2"));
 
         // Verify chunk path templates
-        assert!(album.tracks[0]
-            .segment_path_template
-            .contains("disc_1/track_2/chunk"));
-        assert!(album.tracks[1]
-            .segment_path_template
-            .contains("disc_2/track_2/chunk"));
-        assert!(album.tracks[2]
-            .segment_path_template
-            .contains("disc_3/track_2/chunk"));
+        assert!(
+            album.tracks[0]
+                .segment_path_template
+                .contains("disc_1/track_2/chunk")
+        );
+        assert!(
+            album.tracks[1]
+                .segment_path_template
+                .contains("disc_2/track_2/chunk")
+        );
+        assert!(
+            album.tracks[2]
+                .segment_path_template
+                .contains("disc_3/track_2/chunk")
+        );
 
         // Test actual path substitution
         let test_path = album.tracks[0].segment_path_template.as_str();

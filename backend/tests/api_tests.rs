@@ -112,12 +112,16 @@ created_at = "2024-01-01T00:00:00Z"
     assert_eq!(db.albums[0].tracks[1].disc_number, 1);
 
     // Verify paths include disc_number
-    assert!(db.albums[0].tracks[0]
-        .init_segment_path
-        .contains("disc_1/track_1"));
-    assert!(db.albums[0].tracks[1]
-        .init_segment_path
-        .contains("disc_1/track_2"));
+    assert!(
+        db.albums[0].tracks[0]
+            .init_segment_path
+            .contains("disc_1/track_1")
+    );
+    assert!(
+        db.albums[0].tracks[1]
+            .init_segment_path
+            .contains("disc_1/track_2")
+    );
 }
 
 #[tokio::test]

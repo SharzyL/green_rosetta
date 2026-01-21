@@ -257,12 +257,7 @@ async fn generate(
 
             let processor = AudioProcessor::new(segment_duration_seconds, profiles.clone());
             if let Err(e) = processor
-                .process_album(
-                    &album_info,
-                    &output_media,
-                    &album_id,
-                    job_semaphore.clone(),
-                )
+                .process_album(&album_info, &output_media, &album_id, job_semaphore.clone())
                 .await
             {
                 eprintln!(

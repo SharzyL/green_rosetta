@@ -27,8 +27,8 @@ fn url_encode_pathish(raw: &str) -> String {
     // Everything else outside a conservative ASCII allowlist is encoded as UTF-8 bytes.
     let mut out = String::with_capacity(raw.len());
     for ch in raw.chars() {
-        let keep = ch.is_ascii_alphanumeric()
-            || matches!(ch, '-' | '_' | '.' | '~' | '/' | '$' | '%');
+        let keep =
+            ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~' | '/' | '$' | '%');
         if keep {
             out.push(ch);
         } else {
@@ -43,10 +43,7 @@ fn url_encode_pathish(raw: &str) -> String {
 }
 
 impl DashGenerator {
-    pub fn new(
-        media_base_url: String,
-        streaming: &config::StreamingConfig,
-    ) -> Self {
+    pub fn new(media_base_url: String, streaming: &config::StreamingConfig) -> Self {
         DashGenerator {
             media_base_url,
             time_shift_buffer_depth_seconds: streaming.time_shift_buffer_depth,
@@ -76,10 +73,7 @@ impl DashGenerator {
             });
         }
 
-        let periods_xml = generate_periods(
-            &period_infos,
-            &self.media_base_url,
-        );
+        let periods_xml = generate_periods(&period_infos, &self.media_base_url);
 
         let time_shift_buffer_depth_seconds = self.time_shift_buffer_depth_seconds.max(1.0);
         let suggested_presentation_delay_seconds =
@@ -117,10 +111,7 @@ struct PeriodInfo {
     track: Track,
 }
 
-fn generate_periods(
-    periods: &[PeriodInfo],
-    media_base_url: &str,
-) -> String {
+fn generate_periods(periods: &[PeriodInfo], media_base_url: &str) -> String {
     let mut result = String::new();
 
     for period in periods {

@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Path, State},
-    http::{header, HeaderMap, StatusCode},
     Json,
+    extract::{Path, State},
+    http::{HeaderMap, StatusCode, header},
 };
 use serde::{Deserialize, Serialize};
 
@@ -107,10 +107,16 @@ pub(crate) async fn album(
     State(state): State<AppState>,
 ) -> Result<Json<AlbumResponse>, (StatusCode, String)> {
     let media_base = media_base_url(&state)?;
-    let album = state.db.read().await.get_album(&album_id).cloned().ok_or_else(|| {
-        tracing::error!("Album not found: {}", album_id);
-        (StatusCode::NOT_FOUND, "Album not found".to_string())
-    })?;
+    let album = state
+        .db
+        .read()
+        .await
+        .get_album(&album_id)
+        .cloned()
+        .ok_or_else(|| {
+            tracing::error!("Album not found: {}", album_id);
+            (StatusCode::NOT_FOUND, "Album not found".to_string())
+        })?;
 
     let mut tracks = Vec::with_capacity(album.tracks.len());
     for track in &album.tracks {

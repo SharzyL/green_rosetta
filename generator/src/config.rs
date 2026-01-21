@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::str::FromStr;
@@ -214,8 +214,7 @@ impl GeneratorConfig {
 }
 
 fn sanitize_component(s: &str) -> String {
-    s.trim()
-        .replace([' ', '/', '\\'], "_")
+    s.trim().replace([' ', '/', '\\'], "_")
 }
 
 fn make_unique_name(base: String, used: &mut std::collections::HashSet<String>) -> String {
