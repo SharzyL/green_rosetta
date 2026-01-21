@@ -10,6 +10,7 @@ import {
 	type MediaPlayerClass,
 	type PeriodSwitchEvent,
 	type PlaybackErrorEvent,
+	type StreamInfo,
 } from "dashjs";
 import { loadMuted, loadVolume } from "../lib/volume";
 
@@ -104,6 +105,25 @@ const Player = React.memo(
 			// Attach player to video element
 			player.initialize(videoElement, manifestUrl, false);
 
+			const emitPeriodInfo = (maybeStreamInfo?: StreamInfo | null) => {
+				// `PERIOD_SWITCH_COMPLETED` gives us the target `StreamInfo`, but on initial load
+				// we need to query dash.js state to learn the current period.
+				const streamInfo =
+					maybeStreamInfo ??
+					player.getCurrentTrackFor("audio")?.streamInfo ??
+					null;
+
+				const streamInfoId = streamInfo?.id as string | undefined;
+				if (streamInfoId?.startsWith("period_")) {
+					const trackId = streamInfoId.slice("period_".length);
+					onTrackIdChangeRef.current?.(trackId);
+				}
+
+				if (typeof streamInfo?.start === "number") {
+					onPeriodStartSecondsChangeRef.current?.(streamInfo.start);
+				}
+			};
+
 			// Define event handlers inside useEffect to avoid dependency issues
 			const attemptAutoplay = async () => {
 				try {
@@ -118,18 +138,7 @@ const Player = React.memo(
 
 			const handleStreamInitialized = () => {
 				attemptAutoplay();
-
-				// Best-effort initial period -> track mapping.
-				const streamInfo = player.getActiveStream?.()?.getStreamInfo?.();
-				const streamInfoId = streamInfo?.id as string | undefined;
-				if (streamInfoId?.startsWith("period_")) {
-					const trackId = streamInfoId.slice("period_".length);
-					onTrackIdChangeRef.current?.(trackId);
-				}
-
-				if (typeof streamInfo?.start === "number") {
-					onPeriodStartSecondsChangeRef.current?.(streamInfo.start);
-				}
+				emitPeriodInfo();
 			};
 
 			const handlePlaybackError = (e: PlaybackErrorEvent) => {
@@ -145,15 +154,7 @@ const Player = React.memo(
 					e.toStreamInfo?.id,
 				);
 
-				const periodId = e.toStreamInfo?.id;
-				if (typeof periodId === "string" && periodId.startsWith("period_")) {
-					const trackId = periodId.slice("period_".length);
-					onTrackIdChangeRef.current?.(trackId);
-				}
-
-				if (typeof e.toStreamInfo?.start === "number") {
-					onPeriodStartSecondsChangeRef.current?.(e.toStreamInfo.start);
-				}
+				emitPeriodInfo(e.toStreamInfo);
 
 				if (currentLatency < -1.0) {
 					const waitTimeSeconds = 1.0;

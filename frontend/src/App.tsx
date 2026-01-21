@@ -39,7 +39,15 @@ function App(): ReactElement {
 
 	useEffect(() => {
 		const trackId = currentTrackId;
-		if (!trackId) return;
+		if (!trackId) {
+			setTrackInfo(null);
+			return;
+		}
+
+		// Clear immediately so UI doesn't keep showing the previous track/album
+		// while the next track metadata request is in flight.
+		setTrackInfo(null);
+		setError(null);
 
 		const controller = new AbortController();
 		const isAbortError = (err: unknown) =>
@@ -71,23 +79,38 @@ function App(): ReactElement {
 
 	useEffect(() => {
 		const albumId = trackInfo?.album_id;
-		if (!albumId) return;
+		if (!albumId) {
+			setCurrentAlbum(null);
+			return;
+		}
+
+		// Clear immediately so UI shows skeleton while the new album loads.
+		setCurrentAlbum(null);
+
+		const controller = new AbortController();
+		const isAbortError = (err: unknown) =>
+			err instanceof DOMException && err.name === "AbortError";
 
 		const fetchAlbum = async () => {
 			try {
-				const response = await fetch(API_ENDPOINTS.album(albumId));
+				const response = await fetch(API_ENDPOINTS.album(albumId), {
+					signal: controller.signal,
+				});
 				if (!response.ok) {
 					throw new Error(`Album API error: ${response.status}`);
 				}
 				const data = (await response.json()) as AlbumResponse;
 				setCurrentAlbum(data);
 			} catch (err) {
+				if (isAbortError(err)) return;
 				console.error("Failed to fetch album:", err);
 				setCurrentAlbum(null);
 			}
 		};
 
-		fetchAlbum();
+		void fetchAlbum();
+
+		return () => controller.abort();
 	}, [trackInfo?.album_id]);
 
 	return (
