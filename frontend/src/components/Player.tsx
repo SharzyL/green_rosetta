@@ -1,216 +1,216 @@
 import React, {
-	type ReactElement,
-	type RefObject,
-	useEffect,
-	useRef,
+  type ReactElement,
+  type RefObject,
+  useEffect,
+  useRef,
 } from "react";
 import "./Player.css";
 import {
-	MediaPlayer,
-	type MediaPlayerClass,
-	type PeriodSwitchEvent,
-	type PlaybackErrorEvent,
-	type StreamInfo,
+  MediaPlayer,
+  type MediaPlayerClass,
+  type PeriodSwitchEvent,
+  type PlaybackErrorEvent,
+  type StreamInfo,
 } from "dashjs";
 import { loadMuted, loadVolume } from "../lib/volume";
 
 interface PlayerProps {
-	videoRef: RefObject<HTMLVideoElement | null>;
-	manifestUrl: string;
-	onAutoplayBlockedChange?: (blocked: boolean) => void;
-	onTrackIdChange?: (trackId: string) => void;
-	onPeriodStartSecondsChange?: (startSeconds: number) => void;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  manifestUrl: string;
+  onAutoplayBlockedChange?: (blocked: boolean) => void;
+  onTrackIdChange?: (trackId: string) => void;
+  onPeriodStartSecondsChange?: (startSeconds: number) => void;
 }
 
 const Player = React.memo(
-	({
-		videoRef,
-		manifestUrl,
-		onAutoplayBlockedChange,
-		onTrackIdChange,
-		onPeriodStartSecondsChange,
-	}: PlayerProps): ReactElement => {
-		// We attempt auto-play; if blocked by the browser, UI elsewhere can prompt for a gesture.
-		const onAutoplayBlockedChangeRef =
-			useRef<PlayerProps["onAutoplayBlockedChange"]>(null);
-		const onTrackIdChangeRef = useRef<PlayerProps["onTrackIdChange"]>(null);
-		const onPeriodStartSecondsChangeRef =
-			useRef<PlayerProps["onPeriodStartSecondsChange"]>(null);
-		const playerRef = useRef<MediaPlayerClass | null>(null);
+  ({
+    videoRef,
+    manifestUrl,
+    onAutoplayBlockedChange,
+    onTrackIdChange,
+    onPeriodStartSecondsChange,
+  }: PlayerProps): ReactElement => {
+    // We attempt auto-play; if blocked by the browser, UI elsewhere can prompt for a gesture.
+    const onAutoplayBlockedChangeRef =
+      useRef<PlayerProps["onAutoplayBlockedChange"]>(null);
+    const onTrackIdChangeRef = useRef<PlayerProps["onTrackIdChange"]>(null);
+    const onPeriodStartSecondsChangeRef =
+      useRef<PlayerProps["onPeriodStartSecondsChange"]>(null);
+    const playerRef = useRef<MediaPlayerClass | null>(null);
 
-		useEffect(() => {
-			onAutoplayBlockedChangeRef.current = onAutoplayBlockedChange;
-		}, [onAutoplayBlockedChange]);
+    useEffect(() => {
+      onAutoplayBlockedChangeRef.current = onAutoplayBlockedChange;
+    }, [onAutoplayBlockedChange]);
 
-		useEffect(() => {
-			onTrackIdChangeRef.current = onTrackIdChange;
-		}, [onTrackIdChange]);
+    useEffect(() => {
+      onTrackIdChangeRef.current = onTrackIdChange;
+    }, [onTrackIdChange]);
 
-		useEffect(() => {
-			onPeriodStartSecondsChangeRef.current = onPeriodStartSecondsChange;
-		}, [onPeriodStartSecondsChange]);
+    useEffect(() => {
+      onPeriodStartSecondsChangeRef.current = onPeriodStartSecondsChange;
+    }, [onPeriodStartSecondsChange]);
 
-		// Initialize DASH player once on mount
-		useEffect(() => {
-			const videoElement = videoRef.current;
-			if (!videoElement || !manifestUrl) return;
+    // Initialize DASH player once on mount
+    useEffect(() => {
+      const videoElement = videoRef.current;
+      if (!videoElement || !manifestUrl) return;
 
-			// Apply persisted audio settings early so autoplay uses the user's preferred volume.
-			videoElement.volume = loadVolume(0.8);
-			videoElement.muted = loadMuted();
+      // Apply persisted audio settings early so autoplay uses the user's preferred volume.
+      videoElement.volume = loadVolume(0.8);
+      videoElement.muted = loadMuted();
 
-			console.log("Initializing DASH player");
+      console.log("Initializing DASH player");
 
-			// Create and configure player
-			const player = MediaPlayer().create();
-			playerRef.current = player;
+      // Create and configure player
+      const player = MediaPlayer().create();
+      playerRef.current = player;
 
-			// Configure DASH.js settings
-			player.updateSettings({
-				streaming: {
-					abr: {
-						autoSwitchBitrate: { audio: true },
-					},
-					buffer: {
-						bufferToKeep: 30,
-						bufferTimeAtTopQuality: 60,
-						stallThreshold: 0.3,
-					},
-					gaps: {
-						jumpGaps: false,
-					},
-					delay: {
-						useSuggestedPresentationDelay: true,
-					},
-					liveCatchup: {
-						enabled: true,
-						playbackRate: {
-							min: -0.02,
-							max: 0.02,
-						},
-					},
-					utcSynchronization: {
-						enabled: true,
-						useManifestDateHeaderTimeSource: false,
-					},
-					retryAttempts: {
-						MPD: 3,
-					},
-					retryIntervals: {
-						MPD: 500,
-					},
-				},
-			});
+      // Configure DASH.js settings
+      player.updateSettings({
+        streaming: {
+          abr: {
+            autoSwitchBitrate: { audio: true },
+          },
+          buffer: {
+            bufferToKeep: 30,
+            bufferTimeAtTopQuality: 60,
+            stallThreshold: 0.3,
+          },
+          gaps: {
+            jumpGaps: false,
+          },
+          delay: {
+            useSuggestedPresentationDelay: true,
+          },
+          liveCatchup: {
+            enabled: true,
+            playbackRate: {
+              min: -0.02,
+              max: 0.02,
+            },
+          },
+          utcSynchronization: {
+            enabled: true,
+            useManifestDateHeaderTimeSource: false,
+          },
+          retryAttempts: {
+            MPD: 3,
+          },
+          retryIntervals: {
+            MPD: 500,
+          },
+        },
+      });
 
-			// Attach player to video element
-			player.initialize(videoElement, manifestUrl, false);
+      // Attach player to video element
+      player.initialize(videoElement, manifestUrl, false);
 
-			const emitPeriodInfo = (maybeStreamInfo?: StreamInfo | null) => {
-				// `PERIOD_SWITCH_COMPLETED` gives us the target `StreamInfo`, but on initial load
-				// we need to query dash.js state to learn the current period.
-				const streamInfo =
-					maybeStreamInfo ??
-					player.getCurrentTrackFor("audio")?.streamInfo ??
-					null;
+      const emitPeriodInfo = (maybeStreamInfo?: StreamInfo | null) => {
+        // `PERIOD_SWITCH_COMPLETED` gives us the target `StreamInfo`, but on initial load
+        // we need to query dash.js state to learn the current period.
+        const streamInfo =
+          maybeStreamInfo ??
+          player.getCurrentTrackFor("audio")?.streamInfo ??
+          null;
 
-				const streamInfoId = streamInfo?.id as string | undefined;
-				if (streamInfoId?.startsWith("period_")) {
-					const trackId = streamInfoId.slice("period_".length);
-					onTrackIdChangeRef.current?.(trackId);
-				}
+        const streamInfoId = streamInfo?.id as string | undefined;
+        if (streamInfoId?.startsWith("period_")) {
+          const trackId = streamInfoId.slice("period_".length);
+          onTrackIdChangeRef.current?.(trackId);
+        }
 
-				if (typeof streamInfo?.start === "number") {
-					onPeriodStartSecondsChangeRef.current?.(streamInfo.start);
-				}
-			};
+        if (typeof streamInfo?.start === "number") {
+          onPeriodStartSecondsChangeRef.current?.(streamInfo.start);
+        }
+      };
 
-			// Define event handlers inside useEffect to avoid dependency issues
-			const attemptAutoplay = async () => {
-				try {
-					await videoElement.play();
-					onAutoplayBlockedChangeRef.current?.(false);
-				} catch (err) {
-					// Autoplay blocked; require a user gesture.
-					console.warn("Autoplay blocked:", err);
-					onAutoplayBlockedChangeRef.current?.(true);
-				}
-			};
+      // Define event handlers inside useEffect to avoid dependency issues
+      const attemptAutoplay = async () => {
+        try {
+          await videoElement.play();
+          onAutoplayBlockedChangeRef.current?.(false);
+        } catch (err) {
+          // Autoplay blocked; require a user gesture.
+          console.warn("Autoplay blocked:", err);
+          onAutoplayBlockedChangeRef.current?.(true);
+        }
+      };
 
-			const handleStreamInitialized = () => {
-				attemptAutoplay();
-				emitPeriodInfo();
-			};
+      const handleStreamInitialized = () => {
+        attemptAutoplay();
+        emitPeriodInfo();
+      };
 
-			const handlePlaybackError = (e: PlaybackErrorEvent) => {
-				console.error("DASH playback error:", e);
-			};
+      const handlePlaybackError = (e: PlaybackErrorEvent) => {
+        console.error("DASH playback error:", e);
+      };
 
-			const handlePeriodSwitch = (e: PeriodSwitchEvent) => {
-				const currentLatency =
-					player.getCurrentLiveLatency() - player.getTargetLiveDelay();
+      const handlePeriodSwitch = (e: PeriodSwitchEvent) => {
+        const currentLatency =
+          player.getCurrentLiveLatency() - player.getTargetLiveDelay();
 
-				console.log(
-					`Period switch: latency=${currentLatency}`,
-					e.toStreamInfo?.id,
-				);
+        console.log(
+          `Period switch: latency=${currentLatency}`,
+          e.toStreamInfo?.id,
+        );
 
-				emitPeriodInfo(e.toStreamInfo);
+        emitPeriodInfo(e.toStreamInfo);
 
-				if (currentLatency < -1.0) {
-					const waitTimeSeconds = 1.0;
-					const waitTimeMs = waitTimeSeconds * 1000;
-					console.log(`Period switch: will pause for ${waitTimeMs}ms (${e})`);
+        if (currentLatency < -1.0) {
+          const waitTimeSeconds = 1.0;
+          const waitTimeMs = waitTimeSeconds * 1000;
+          console.log(`Period switch: will pause for ${waitTimeMs}ms (${e})`);
 
-					player.pause();
+          player.pause();
 
-					setTimeout(() => {
-						player.play();
-					}, waitTimeMs);
-				}
-			};
+          setTimeout(() => {
+            player.play();
+          }, waitTimeMs);
+        }
+      };
 
-			const handleVideoPlay = () => {
-				onAutoplayBlockedChangeRef.current?.(false);
-			};
+      const handleVideoPlay = () => {
+        onAutoplayBlockedChangeRef.current?.(false);
+      };
 
-			// Register DASH.js event listeners
-			const events = MediaPlayer.events;
+      // Register DASH.js event listeners
+      const events = MediaPlayer.events;
 
-			player.on(events.STREAM_INITIALIZED, handleStreamInitialized);
-			player.on(events.PLAYBACK_ERROR, handlePlaybackError);
-			player.on(events.PERIOD_SWITCH_COMPLETED, handlePeriodSwitch);
+      player.on(events.STREAM_INITIALIZED, handleStreamInitialized);
+      player.on(events.PLAYBACK_ERROR, handlePlaybackError);
+      player.on(events.PERIOD_SWITCH_COMPLETED, handlePeriodSwitch);
 
-			// Register video element event listeners
-			videoElement.addEventListener("play", handleVideoPlay);
+      // Register video element event listeners
+      videoElement.addEventListener("play", handleVideoPlay);
 
-			const diagnosticInterval = setInterval(() => {
-				console.log("debug[live latency]", {
-					clientTime: new Date().toISOString(),
-					offset: player.getCurrentLiveLatency() - player.getTargetLiveDelay(),
-				});
-			}, 10000);
+      const diagnosticInterval = setInterval(() => {
+        console.log("debug[live latency]", {
+          clientTime: new Date().toISOString(),
+          offset: player.getCurrentLiveLatency() - player.getTargetLiveDelay(),
+        });
+      }, 10000);
 
-			// Cleanup on unmount
-			return () => {
-				player.off(events.STREAM_INITIALIZED, handleStreamInitialized);
-				player.off(events.PLAYBACK_ERROR, handlePlaybackError);
-				player.off(events.PERIOD_SWITCH_COMPLETED, handlePeriodSwitch);
+      // Cleanup on unmount
+      return () => {
+        player.off(events.STREAM_INITIALIZED, handleStreamInitialized);
+        player.off(events.PLAYBACK_ERROR, handlePlaybackError);
+        player.off(events.PERIOD_SWITCH_COMPLETED, handlePeriodSwitch);
 
-				videoElement.removeEventListener("play", handleVideoPlay);
+        videoElement.removeEventListener("play", handleVideoPlay);
 
-				player.destroy();
-				clearInterval(diagnosticInterval);
-				playerRef.current = null;
-			};
-		}, [manifestUrl, videoRef]);
+        player.destroy();
+        clearInterval(diagnosticInterval);
+        playerRef.current = null;
+      };
+    }, [manifestUrl, videoRef]);
 
-		return (
-			<div className="player-wrapper">
-				{/* biome-ignore lint/a11y/useMediaCaption: We stream audio-only content and don't provide captions. */}
-				<video ref={videoRef} className="player-media" />
-			</div>
-		);
-	},
+    return (
+      <div className="player-wrapper">
+        {/* biome-ignore lint/a11y/useMediaCaption: We stream audio-only content and don't provide captions. */}
+        <video ref={videoRef} className="player-media" />
+      </div>
+    );
+  },
 );
 
 Player.displayName = "Player";

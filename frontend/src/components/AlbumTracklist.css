@@ -1,240 +1,240 @@
 .album-tracklist {
-	margin-top: 12px;
-	width: 100%;
-	border: 1px solid rgba(0, 0, 0, 0.08);
-	overflow: hidden;
-	background: #ffd220;
+  margin-top: 12px;
+  width: 100%;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  background: #ffd220;
 }
 
 .album-tracklist-header {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
 }
 
 .album-tracklist-headerTop {
-	position: relative;
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-	gap: 12px;
-	padding-right: 36px; /* reserve space for the absolute toggle button */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-right: 36px; /* reserve space for the absolute toggle button */
 }
 
 .album-tracklist-title {
-	font-weight: 800;
-	color: #1f2a5a;
+  font-weight: 800;
+  color: #1f2a5a;
 }
 
 .album-tracklist-title-suffix {
-	color: rgba(31, 42, 90, 0.62);
+  color: rgba(31, 42, 90, 0.62);
 }
 
 .album-tracklist-title-link {
-	color: inherit;
-	text-decoration: none;
+  color: inherit;
+  text-decoration: none;
 }
 
 .album-tracklist-title-link:hover {
-	text-decoration: underline;
+  text-decoration: underline;
 }
 
 .album-tracklist-toggle {
-	position: absolute;
-	right: 0;
-	top: 50%;
-	transform: translateY(-50%);
-	border: none;
-	background: transparent;
-	color: rgba(31, 42, 90, 0.7);
-	width: 32px;
-	height: 32px;
-	border-radius: 10px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	flex: 0 0 auto;
-	transition:
-		background 0.12s ease,
-		color 0.12s ease,
-		transform 0.08s ease;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: rgba(31, 42, 90, 0.7);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    transform 0.08s ease;
 }
 
 .album-tracklist-toggle:active {
-	transform: translateY(calc(-50% + 1px));
+  transform: translateY(calc(-50% + 1px));
 }
 
 .album-tracklist-toggle:focus-visible {
-	outline: none;
-	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.22);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.22);
 }
 
 .album-tracklist-meta {
-	font-family: "Monaco", "Menlo", monospace;
-	margin-top: 6px;
-	display: grid;
-	gap: 4px;
-	font-size: 12px;
-	color: rgba(31, 42, 90, 0.7);
+  font-family: "Monaco", "Menlo", monospace;
+  margin-top: 6px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(31, 42, 90, 0.7);
 }
 
 .album-tracklist-meta-row {
-	display: grid;
-	grid-template-columns: 78px 1fr;
-	gap: 10px;
-	align-items: baseline;
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 10px;
+  align-items: baseline;
 }
 
 .album-tracklist-meta-key {
-	color: rgba(31, 42, 90, 0.45);
-	letter-spacing: 0.02em;
+  color: rgba(31, 42, 90, 0.45);
+  letter-spacing: 0.02em;
 }
 
 .album-tracklist-meta-value {
-	color: rgba(15, 23, 42, 0.7);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+  color: rgba(15, 23, 42, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .album-tracklist-empty {
-	padding: 14px 16px;
-	font-size: 13px;
-	color: rgba(0, 0, 0, 0.6);
+  padding: 14px 16px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
 }
 
 .skeleton-line {
-	display: inline-block;
-	border-radius: 8px;
-	background: linear-gradient(
-		90deg,
-		rgba(0, 0, 0, 0.06) 0%,
-		rgba(0, 0, 0, 0.12) 40%,
-		rgba(0, 0, 0, 0.06) 80%
-	);
-	background-size: 240px 100%;
-	animation: shimmer 1.2s ease-in-out infinite;
+  display: inline-block;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.06) 0%,
+    rgba(0, 0, 0, 0.12) 40%,
+    rgba(0, 0, 0, 0.06) 80%
+  );
+  background-size: 240px 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
 }
 
 .skeleton-line--metaValue {
-	width: min(360px, 92%);
-	height: 12px;
+  width: min(360px, 92%);
+  height: 12px;
 }
 
 .skeleton-line--metaValueShort {
-	width: min(120px, 46%);
-	height: 12px;
+  width: min(120px, 46%);
+  height: 12px;
 }
 
 @keyframes shimmer {
-	0% {
-		background-position: -240px 0;
-	}
-	100% {
-		background-position: 240px 0;
-	}
+  0% {
+    background-position: -240px 0;
+  }
+  100% {
+    background-position: 240px 0;
+  }
 }
 
 .album-tracklist-items {
-	list-style: none;
-	margin: 0;
-	padding: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .album-tracklist-itemsWrap {
-	overflow: hidden;
-	max-height: 0px;
-	opacity: 0;
-	transition:
-		max-height 260ms ease,
-		opacity 200ms ease;
+  overflow: hidden;
+  max-height: 0px;
+  opacity: 0;
+  transition:
+    max-height 260ms ease,
+    opacity 200ms ease;
 }
 
 .album-tracklist-itemsWrap.is-expanded {
-	opacity: 1;
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.album-tracklist-itemsWrap {
-		transition: none;
-	}
+  .album-tracklist-itemsWrap {
+    transition: none;
+  }
 }
 
 .album-tracklist-disc {
-	padding: 8px 14px;
-	border-top: 1px solid rgba(0, 0, 0, 0.06);
-	background: rgba(0, 0, 0, 0.02);
-	font-size: 11px;
-	font-weight: 800;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: rgba(15, 23, 42, 0.6);
+  padding: 8px 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(15, 23, 42, 0.6);
 }
 
 .album-tracklist-item {
-	padding: 8px 14px;
+  padding: 8px 14px;
 }
 
 .album-tracklist-item:first-child {
-	border-top: none;
+  border-top: none;
 }
 
 .album-tracklist-item.is-current {
-	background: rgba(255, 0, 128, 0.1);
+  background: rgba(255, 0, 128, 0.1);
 }
 
 .album-tracklist-main {
-	display: grid;
-	grid-template-columns: 34px 1fr auto;
-	align-items: center;
-	gap: 10px;
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
 }
 
 .album-tracklist-left {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .album-tracklist-num {
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-	color: rgba(15, 23, 42, 0.58);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(15, 23, 42, 0.58);
 }
 
 .album-tracklist-track {
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .album-tracklist-track-title {
-	font-size: 13px;
-	font-weight: 700;
-	color: #0f172a;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .album-tracklist-track-meta {
-	font-size: 11px;
-	color: rgba(15, 23, 42, 0.62);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.62);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .album-tracklist-right {
-	display: flex;
-	align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .album-tracklist-duration {
-	font-size: 11px;
-	color: rgba(15, 23, 42, 0.62);
-	font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.62);
+  font-variant-numeric: tabular-nums;
 }

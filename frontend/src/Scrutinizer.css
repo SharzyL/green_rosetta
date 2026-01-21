@@ -1,182 +1,182 @@
 /* Scrutinizer uses the same outer layout as the main player (see App.css).
    All content stays inside the `.player-card`, except the shared title. */
 .scrutinizerCard {
-	font-family:
-		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-		"Courier New", monospace;
-	color: rgba(15, 23, 42, 0.92);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  color: rgba(15, 23, 42, 0.92);
 }
 
 .scrutinizerTopbar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 18px 18px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 12px;
 }
 
 .scrutinizerTopbar__actions {
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .scrutinizerTopbar__status {
-	font-size: 12px;
-	color: rgba(15, 23, 42, 0.6);
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.6);
 }
 
 .scrutinizer__button {
-	border: 1px solid rgba(0, 0, 0, 0.12);
-	background: rgba(255, 255, 255, 0.9);
-	padding: 8px 12px;
-	cursor: pointer;
-	font-weight: 800;
-	color: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.85);
 }
 
 .scrutinizer__button:hover {
-	background: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 1);
 }
 
 .scrutinizer__loading {
-	padding: 18px 18px;
-	color: rgba(15, 23, 42, 0.7);
+  padding: 18px 18px;
+  color: rgba(15, 23, 42, 0.7);
 }
 
 .scrutinizer__error {
-	border: 1px solid rgba(122, 20, 20, 0.35);
-	background: rgba(255, 240, 240, 0.9);
-	color: rgba(122, 20, 20, 0.95);
-	padding: 12px 14px;
-	margin: 0 18px 12px;
+  border: 1px solid rgba(122, 20, 20, 0.35);
+  background: rgba(255, 240, 240, 0.9);
+  color: rgba(122, 20, 20, 0.95);
+  padding: 12px 14px;
+  margin: 0 18px 12px;
 }
 
 .scrutinizerLogin {
-	padding: 0 18px 18px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
+  padding: 0 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .scrutinizerLogin__row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .scrutinizerLogin__label {
-	font-size: 12px;
-	color: rgba(15, 23, 42, 0.72);
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.72);
 }
 
 .scrutinizerLogin__input {
-	width: 220px;
-	padding: 8px 10px;
-	border: 1px solid rgba(0, 0, 0, 0.12);
-	background: rgba(255, 255, 255, 0.9);
-	font: inherit;
+  width: 220px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  font: inherit;
 }
 
 .scrutinizerLogin__submit {
-	align-self: flex-end;
+  align-self: flex-end;
 }
 
 /* Album list intentionally matches the look of the in-player tracklist. */
 .scrutinizerAlbumList {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	border: 1px solid rgba(0, 0, 0, 0.08);
-	overflow: hidden;
-	background: #ffd220;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  background: #ffd220;
 }
 
 .scrutinizerAlbumItem {
-	padding: 8px 14px;
-	border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .scrutinizerAlbumItem:first-child {
-	border-top: none;
+  border-top: none;
 }
 
 .scrutinizerAlbumItem.is-disabled {
-	opacity: 0.55;
+  opacity: 0.55;
 }
 
 .scrutinizerAlbumMain {
-	display: grid;
-	grid-template-columns: 34px 1fr auto;
-	align-items: center;
-	gap: 10px;
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
 }
 
 .scrutinizerAlbumLeft {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .scrutinizerAlbumNum {
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-	color: rgba(15, 23, 42, 0.58);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(15, 23, 42, 0.58);
 }
 
 .scrutinizerAlbumInfo {
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .scrutinizerAlbumTitle {
-	font-size: 13px;
-	font-weight: 700;
-	color: #0f172a;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .scrutinizerAlbumMeta {
-	font-size: 11px;
-	color: rgba(15, 23, 42, 0.62);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.62);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .scrutinizerAlbumRight {
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .scrutinizerAlbumCount {
-	font-size: 11px;
-	color: rgba(15, 23, 42, 0.62);
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.62);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .scrutinizerAlbumToggle {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
 }
 
 .scrutinizerAlbumCheckbox {
-	width: 16px;
-	height: 16px;
-	accent-color: rgba(255, 0, 128, 1);
-	cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: rgba(255, 0, 128, 1);
+  cursor: pointer;
 }
 
 .scrutinizerAlbumCheckbox:disabled {
-	opacity: 0.7;
+  opacity: 0.7;
 }

@@ -6,13 +6,13 @@ import { mountHalftoneBackground } from "./lib/halftoneBackground";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
-	throw new Error("Missing #root element");
+  throw new Error("Missing #root element");
 }
 
 mountHalftoneBackground();
 
 ReactDOM.createRoot(rootEl).render(
-	<React.StrictMode>
-		<App />
-	</React.StrictMode>,
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
 );

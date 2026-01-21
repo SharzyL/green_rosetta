@@ -1,149 +1,149 @@
 .volume {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex: 0 0 auto;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
 }
 
 .volume__mute {
-	width: 28px;
-	height: 28px;
-	border-radius: 10px;
-	border: none;
-	background: rgba(255, 255, 255, 0.75);
-	color: rgba(31, 42, 90, 0.85);
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	transition:
-		transform 0.08s ease,
-		background 0.12s ease;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255, 255, 255, 0.75);
+  color: rgba(31, 42, 90, 0.85);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.08s ease,
+    background 0.12s ease;
 }
 
 .volume__mute:focus-visible {
-	outline: none;
-	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.22);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.22);
 }
 
 .volume__mute:active {
-	transform: translateY(1px);
+  transform: translateY(1px);
 }
 
 .volume__mute--silent {
-	color: #aa0000;
+  color: #aa0000;
 }
 
 .volume__slider:hover {
-	cursor: pointer;
+  cursor: pointer;
 }
 
 .volume__slider {
-	position: relative;
-	height: 28px; /* larger hit area */
-	width: 100%;
-	min-width: 0;
-	outline: none;
-	touch-action: none;
+  position: relative;
+  height: 28px; /* larger hit area */
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  touch-action: none;
 }
 
 .volume__sliderTrack {
-	position: absolute;
-	left: 0;
-	right: 0;
-	top: 50%;
-	transform: translateY(-50%);
-	height: 6px;
-	border-radius: 999px;
-	background: rgba(102, 126, 234, 0.22);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(102, 126, 234, 0.22);
 }
 
 .volume__sliderFill {
-	position: absolute;
-	left: 0;
-	top: 50%;
-	transform: translateY(-50%);
-	height: 6px;
-	border-radius: 999px;
-	background: rgba(102, 126, 234, 0.9);
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(102, 126, 234, 0.9);
 }
 
 .volume__sliderThumb {
-	position: absolute;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	width: 14px;
-	height: 14px;
-	border-radius: 50%;
-	background: rgba(102, 126, 234, 1);
-	border: 2px solid rgba(255, 255, 255, 0.95);
-	box-shadow: 0 2px 8px rgba(102, 126, 234, 0.28);
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(102, 126, 234, 1);
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.28);
 }
 
 .volume__slider:focus-visible {
-	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.22);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.22);
 }
 
 .volume__slider--muted .volume__sliderTrack {
-	background: rgba(122, 20, 20, 0.22);
+  background: rgba(122, 20, 20, 0.22);
 }
 
 .volume__slider--muted .volume__sliderFill {
-	background: rgba(122, 20, 20, 0.9);
+  background: rgba(122, 20, 20, 0.9);
 }
 
 .volume__slider--muted .volume__sliderThumb {
-	background: #7a1414;
-	box-shadow: 0 2px 8px rgba(255, 0, 128, 0.25);
+  background: #7a1414;
+  box-shadow: 0 2px 8px rgba(255, 0, 128, 0.25);
 }
 
 .volume--blocked {
-	justify-content: center;
+  justify-content: center;
 }
 
 .volume__popup {
-	position: absolute;
-	right: calc(100% + 10px);
-	top: 50%;
-	transform: translateX(var(--volume-popup-shift, 0px)) translateY(-50%);
-	width: clamp(160px, 30vw, 320px);
-	max-width: calc(100vw - 16px);
-	padding: 10px 12px;
-	background: rgba(255, 255, 255, 1);
-	border: 1px solid rgba(0, 0, 0, 0.08);
-	opacity: 0;
-	pointer-events: none;
-	transition:
-		opacity 0.12s ease,
-		transform 0.12s ease;
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateX(var(--volume-popup-shift, 0px)) translateY(-50%);
+  width: clamp(160px, 30vw, 320px);
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 1);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 
 /* Invisible bridge so moving the pointer from icon -> popup doesn't drop :hover. */
 .volume__popup::before {
-	content: "";
-	position: absolute;
-	top: 10px;
-	bottom: 10px;
-	right: -10px;
-	width: 10px;
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: -10px;
+  width: 10px;
 }
 
 /* Show the slider:
    - on hover-capable pointers: hover only (avoid "sticky" popups after click)
    - on touch / no-hover devices: focus-within for usability */
 @media (hover: hover) and (pointer: fine) {
-	.volume:hover .volume__popup {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateX(var(--volume-popup-shift, 0px)) translateY(-50%);
-	}
+  .volume:hover .volume__popup {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(var(--volume-popup-shift, 0px)) translateY(-50%);
+  }
 }
 
 @media (hover: none) {
-	.volume:focus-within .volume__popup {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateX(var(--volume-popup-shift, 0px)) translateY(-50%);
-	}
+  .volume:focus-within .volume__popup {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(var(--volume-popup-shift, 0px)) translateY(-50%);
+  }
 }

@@ -6,13 +6,13 @@ import Scrutinizer from "./Scrutinizer";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
-	throw new Error("Missing #root element");
+  throw new Error("Missing #root element");
 }
 
 mountHalftoneBackground();
 
 ReactDOM.createRoot(rootEl).render(
-	<React.StrictMode>
-		<Scrutinizer />
-	</React.StrictMode>,
+  <React.StrictMode>
+    <Scrutinizer />
+  </React.StrictMode>,
 );
