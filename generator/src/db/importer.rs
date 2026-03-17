@@ -623,17 +623,16 @@ pub async fn import_album(
                         }
                     } else if let (Some(a), Some(b)) =
                         (rep.encoded_length_seconds, first.encoded_length_seconds)
+                        && (a - b).abs() > 0.05
                     {
-                        if (a - b).abs() > 0.05 {
-                            return Err(anyhow!(
-                                "Representation {} duration mismatch in set {} for track {}: {:.3}s != {:.3}s",
-                                rep.name,
-                                set_id,
-                                track_id,
-                                a,
-                                b
-                            ));
-                        }
+                        return Err(anyhow!(
+                            "Representation {} duration mismatch in set {} for track {}: {:.3}s != {:.3}s",
+                            rep.name,
+                            set_id,
+                            track_id,
+                            a,
+                            b
+                        ));
                     }
                 }
             }
@@ -687,16 +686,16 @@ pub async fn import_album(
     let album_dir = album_dir_name(&album.id, &album.artist, &album.name);
     let target_path = metadata_dir.join(format!("{}.yaml", album_dir));
 
-    if let Some(existing_path) = find_album_yaml_by_id(metadata_dir, &album.id)? {
-        if existing_path != target_path {
-            std::fs::rename(&existing_path, &target_path).with_context(|| {
-                format!(
-                    "Rename album metadata {} -> {}",
-                    existing_path.display(),
-                    target_path.display()
-                )
-            })?;
-        }
+    if let Some(existing_path) = find_album_yaml_by_id(metadata_dir, &album.id)?
+        && existing_path != target_path
+    {
+        std::fs::rename(&existing_path, &target_path).with_context(|| {
+            format!(
+                "Rename album metadata {} -> {}",
+                existing_path.display(),
+                target_path.display()
+            )
+        })?;
     }
 
     let yaml = serde_yaml::to_string(&album)?;

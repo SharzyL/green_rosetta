@@ -288,19 +288,16 @@ fn apply_env_overrides(config: &mut config::Config) -> Result<()> {
             .access_key_id
             .as_ref()
             .is_none_or(|v| v.trim().is_empty())
+            && let Ok(v) = std::env::var("AWS_ACCESS_KEY_ID")
+            && !v.trim().is_empty()
         {
-            if let Ok(v) = std::env::var("AWS_ACCESS_KEY_ID") {
-                if !v.trim().is_empty() {
-                    s3.access_key_id = Some(v);
-                }
-            }
+            s3.access_key_id = Some(v);
         }
-        if s3.secret_access_key.is_none() {
-            if let Ok(v) = std::env::var("AWS_SECRET_ACCESS_KEY") {
-                if !v.trim().is_empty() {
-                    s3.secret_access_key = Some(v);
-                }
-            }
+        if s3.secret_access_key.is_none()
+            && let Ok(v) = std::env::var("AWS_SECRET_ACCESS_KEY")
+            && !v.trim().is_empty()
+        {
+            s3.secret_access_key = Some(v);
         }
         if let Some(domain) = s3.public_access_domain.as_deref() {
             s3.public_access_domain = Some(normalize_public_access_domain(domain)?);
@@ -308,15 +305,15 @@ fn apply_env_overrides(config: &mut config::Config) -> Result<()> {
     }
 
     // Scrutinizer (admin) credentials can be provided via environment variables for convenience.
-    if let Ok(v) = std::env::var("SCRUTINIZER_USERNAME") {
-        if !v.trim().is_empty() {
-            config.admin.username = Some(v);
-        }
+    if let Ok(v) = std::env::var("SCRUTINIZER_USERNAME")
+        && !v.trim().is_empty()
+    {
+        config.admin.username = Some(v);
     }
-    if let Ok(v) = std::env::var("SCRUTINIZER_PASSWORD_HASH") {
-        if !v.trim().is_empty() {
-            config.admin.password_hash = Some(v);
-        }
+    if let Ok(v) = std::env::var("SCRUTINIZER_PASSWORD_HASH")
+        && !v.trim().is_empty()
+    {
+        config.admin.password_hash = Some(v);
     }
 
     Ok(())

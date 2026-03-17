@@ -150,30 +150,8 @@ impl Track {
 
             if let (Some(timescale), Some(timeline)) =
                 (rep.segment_timescale, &rep.segment_timeline)
+                && timescale > 0
             {
-                if timescale > 0 {
-                    let mut total_ticks: u64 = 0;
-                    for entry in timeline {
-                        let repeats = entry.r.unwrap_or(0);
-                        if repeats < 0 {
-                            continue;
-                        }
-                        let count = (repeats as u64) + 1;
-                        total_ticks = total_ticks.saturating_add(entry.d.saturating_mul(count));
-                    }
-                    return total_ticks as f64 / timescale as f64;
-                }
-            }
-            if let Some(encoded) = rep.encoded_length_seconds {
-                return encoded;
-            }
-            return rep.segment_count as f64 * self.segment_duration.unwrap_or(6.0);
-        }
-
-        // Legacy fields.
-        if let (Some(timescale), Some(timeline)) = (self.segment_timescale, &self.segment_timeline)
-        {
-            if timescale > 0 {
                 let mut total_ticks: u64 = 0;
                 for entry in timeline {
                     let repeats = entry.r.unwrap_or(0);
@@ -185,6 +163,26 @@ impl Track {
                 }
                 return total_ticks as f64 / timescale as f64;
             }
+            if let Some(encoded) = rep.encoded_length_seconds {
+                return encoded;
+            }
+            return rep.segment_count as f64 * self.segment_duration.unwrap_or(6.0);
+        }
+
+        // Legacy fields.
+        if let (Some(timescale), Some(timeline)) = (self.segment_timescale, &self.segment_timeline)
+            && timescale > 0
+        {
+            let mut total_ticks: u64 = 0;
+            for entry in timeline {
+                let repeats = entry.r.unwrap_or(0);
+                if repeats < 0 {
+                    continue;
+                }
+                let count = (repeats as u64) + 1;
+                total_ticks = total_ticks.saturating_add(entry.d.saturating_mul(count));
+            }
+            return total_ticks as f64 / timescale as f64;
         }
 
         if let Some(encoded) = self.encoded_length_seconds {

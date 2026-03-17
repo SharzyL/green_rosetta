@@ -151,39 +151,38 @@ impl Scanner {
         {
             let entry_path = entry.path();
 
-            if let Some(ext) = entry_path.extension() {
-                if let Some(ext_str) = ext.to_str() {
-                    if matches!(
-                        ext_str.to_lowercase().as_str(),
-                        "flac" | "mp3" | "m4a" | "opus" | "aac"
-                    ) {
-                        match extract_metadata(entry_path) {
-                            Ok(metadata) => {
-                                tracks.push(TrackInfo {
-                                    path: entry_path.to_path_buf(),
-                                    title: metadata.title,
-                                    artist: metadata.artist,
-                                    album: metadata.album,
-                                    track_number: metadata.track_number,
-                                    disc_number: metadata.disc_number,
-                                    disc_total: metadata.disc_total,
-                                    duration: metadata.duration,
-                                    date: metadata.date,
-                                    original_date: metadata.original_date,
-                                    label: metadata.label,
-                                    media: metadata.media,
-                                    catalog_number: metadata.catalog_number,
-                                    musicbrainz_album_id: metadata.musicbrainz_album_id,
-                                });
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "Warning: Failed to extract metadata from {}: {}",
-                                    entry_path.display(),
-                                    e
-                                );
-                            }
-                        }
+            if let Some(ext) = entry_path.extension()
+                && let Some(ext_str) = ext.to_str()
+                && matches!(
+                    ext_str.to_lowercase().as_str(),
+                    "flac" | "mp3" | "m4a" | "opus" | "aac"
+                )
+            {
+                match extract_metadata(entry_path) {
+                    Ok(metadata) => {
+                        tracks.push(TrackInfo {
+                            path: entry_path.to_path_buf(),
+                            title: metadata.title,
+                            artist: metadata.artist,
+                            album: metadata.album,
+                            track_number: metadata.track_number,
+                            disc_number: metadata.disc_number,
+                            disc_total: metadata.disc_total,
+                            duration: metadata.duration,
+                            date: metadata.date,
+                            original_date: metadata.original_date,
+                            label: metadata.label,
+                            media: metadata.media,
+                            catalog_number: metadata.catalog_number,
+                            musicbrainz_album_id: metadata.musicbrainz_album_id,
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: Failed to extract metadata from {}: {}",
+                            entry_path.display(),
+                            e
+                        );
                     }
                 }
             }

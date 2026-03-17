@@ -133,17 +133,15 @@ impl Scheduler {
             .ok_or_else(|| anyhow::anyhow!("Album not found: {}", current_album_id))?;
 
         // Only continue within the current album if it is still enabled.
-        if current_album.enabled {
-            if let Some(pos) = current_album
+        if current_album.enabled
+            && let Some(pos) = current_album
                 .tracks
                 .iter()
                 .position(|t| t.id == current_track_id)
-            {
-                if pos + 1 < current_album.tracks.len() {
-                    let next = &current_album.tracks[pos + 1];
-                    return Ok((current_album_id.to_string(), next.id.clone()));
-                }
-            }
+            && pos + 1 < current_album.tracks.len()
+        {
+            let next = &current_album.tracks[pos + 1];
+            return Ok((current_album_id.to_string(), next.id.clone()));
         }
 
         // Move to the next enabled album in list order, wrapping around.
@@ -164,10 +162,8 @@ impl Scheduler {
 
         let mut found = false;
         for album in &enabled {
-            if found {
-                if let Some(first_track) = album.tracks.first() {
-                    return Ok((album.id.clone(), first_track.id.clone()));
-                }
+            if found && let Some(first_track) = album.tracks.first() {
+                return Ok((album.id.clone(), first_track.id.clone()));
             }
             if album.id == current_album_id {
                 found = true;
