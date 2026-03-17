@@ -55,7 +55,7 @@
           overlays = [ overlay ];
         };
 
-        devShells.default = config.packages.default.overrideAttrs (shellOverride pkgs);
+        devShells.default = config.packages.default.passthru.bin.overrideAttrs (shellOverride pkgs);
 
         treefmt = {
           programs.rustfmt.enable = true;

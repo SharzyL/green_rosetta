@@ -1,6 +1,7 @@
 { stdenv
 , lib
 , rustPlatform
+, runCommand
 
 , pnpm
 , pnpmConfigHook
@@ -36,32 +37,35 @@ let
     '';
   });
 
+  bin = rustPlatform.buildRustPackage
+    {
+      inherit pname version;
+
+      src = with lib.fileset; toSource {
+        root = ./..;
+        fileset = unions [
+          ../Cargo.toml
+          ../Cargo.lock
+          ../backend
+          ../generator
+        ];
+      };
+
+      passthru = { inherit frontend; };
+
+      cargoHash = "sha256-Wvh/oH4DAezGyuKEOh746xfPfJpJu8L2Q1vy2rCJ6hM=";
+
+      # Build both workspace members
+      cargoBuildFlags = [ "--workspace" ];
+
+      doCheck = true;
+    };
 in
-# Build the Rust workspace
-rustPlatform.buildRustPackage {
+runCommand bin.name { } ''
+  mkdir -p $out/share/${pname}/www $out/bin
+  cp ${frontend} -rT $out/share/${pname}/www/
+  cp ${bin}/bin -rT $out/bin
+'' // {
+  passthru = { inherit bin frontend; };
   inherit pname version;
-
-  src = with lib.fileset; toSource {
-    root = ./..;
-    fileset = unions [
-      ../Cargo.toml
-      ../Cargo.lock
-      ../backend
-      ../generator
-    ];
-  };
-
-  passthru = { inherit frontend; };
-
-  cargoHash = "sha256-MjEJf6ljQR6Rs4YCm1vObmXFb8yZl0zbtuCZEih49RY=";
-
-  # Build both workspace members
-  cargoBuildFlags = [ "--workspace" ];
-
-  postInstall = ''
-    mkdir -p $out/share/${pname}/www
-    cp ${frontend} -rT $out/share/${pname}/www/
-  '';
-
-  doCheck = true;
 }
