@@ -22,7 +22,11 @@ jobs:
           nix build
           nix flake check
 
-      - name: Cargo & biome check
+      - name: Cargo check
         run: |
           nix develop -c cargo clippy -- -D warnings
+
+      - name: Frontend check
+        run: |
+          nix develop -c pnpm -C frontend install
           nix develop -c pnpm -C frontend check
