@@ -27,7 +27,7 @@ let
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       fetcherVersion = 3;
-      hash = "sha256-gVlA+yuWKw6PK+u3lGt8jIzzilYRbg5Q6sREhNL0Y2c=";
+      hash = "sha256-NbTX3xFXxd2u/s9ypvqXZg3TeN4us978B1mdOf8RAEE=";
     };
 
     postInstall = ''
@@ -53,7 +53,7 @@ let
 
       passthru = { inherit frontend; };
 
-      cargoHash = "sha256-Wvh/oH4DAezGyuKEOh746xfPfJpJu8L2Q1vy2rCJ6hM=";
+      cargoHash = "sha256-BVgEZdnEOWf47DRnewIUdkvobet4VLmuLT8zY/I46yA=";
 
       # Build both workspace members
       cargoBuildFlags = [ "--workspace" ];
