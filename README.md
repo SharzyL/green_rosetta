@@ -195,6 +195,45 @@ Set the secret key via environment variable:
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
 ```
 
+#### Uploading data with rclone
+
+The generator writes to a local directory, so uploading the resulting
+`media/` and `metadata/` trees to S3 is a separate step. [rclone](https://rclone.org/)
+is the recommended way to do this.
+
+Configure an S3 remote once:
+
+```bash
+rclone config
+```
+
+Pick `n` (new remote), name it (e.g. `gr-s3`), choose `s3` as the type, then
+fill in provider, `access_key_id`, `secret_access_key`, `region`, and
+`endpoint` to match `[storage.s3]` in `backend.config.toml`. The resulting
+entry in `~/.config/rclone/rclone.conf` looks like:
+
+```ini
+[gr-s3]
+type = s3
+provider = AWS
+access_key_id = YOUR_ACCESS_KEY
+secret_access_key = YOUR_SECRET_KEY
+region = us-east-1
+endpoint = https://s3.amazonaws.com
+```
+
+Then sync the generator output into the bucket. The bucket layout must
+mirror the local `./data` directory — `media/` and `metadata/` at the root:
+
+```bash
+rclone sync ./data gr-s3:my-music-bucket --progress
+```
+
+Use `rclone sync ./data/media gr-s3:my-music-bucket/media` to push only the
+(much larger) media segments when metadata has not changed. Add `--checksum`
+to skip already-uploaded segments without re-reading timestamps, and
+`--transfers 16` to parallelize uploads.
+
 ## API Reference
 
 ### Streaming Endpoints
