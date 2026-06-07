@@ -22,17 +22,21 @@ impl AudioProcessor {
         }
     }
 
-    /// Process all tracks in an album
+    /// Process all tracks in an album, writing into `album_dir` (caller-controlled).
+    ///
+    /// The caller is expected to use a staging path here and rename to the final location
+    /// on success, so a failed album leaves only the staging dir behind.
     pub async fn process_album(
         &self,
         album: &AlbumInfo,
-        output_base: &Path,
+        album_dir: &Path,
         album_id: &str,
         job_semaphore: Arc<Semaphore>,
     ) -> Result<()> {
-        println!(
-            "\n[{} | {}] Start encoding the album...",
-            album_id, album.name
+        tracing::info!(
+            "[{} | {}] Start encoding the album...",
+            album_id,
+            album.name
         );
 
         // Encode tracks in parallel (bounded by `job_semaphore`), so a single large album
@@ -43,7 +47,7 @@ impl AudioProcessor {
             let processor = self.clone();
             let album = album.clone();
             let album_id = album_id.to_string();
-            let output_base = output_base.to_path_buf();
+            let album_dir = album_dir.to_path_buf();
             let job_semaphore = job_semaphore.clone();
 
             join_set.spawn(async move {
@@ -56,7 +60,7 @@ impl AudioProcessor {
                     .encode_track(
                         &album,
                         &track,
-                        &output_base,
+                        &album_dir,
                         &album_id,
                         Some((idx + 1, total_tracks)),
                     )
@@ -64,6 +68,9 @@ impl AudioProcessor {
             });
         }
 
+        // On the first error, drop the JoinSet which aborts the remaining tasks; combined
+        // with `kill_on_drop(true)` on the ffmpeg/ffprobe Commands, this terminates any
+        // in-flight subprocesses so they can't keep writing into the staging dir.
         while let Some(result) = join_set.join_next().await {
             result??;
         }
@@ -71,23 +78,15 @@ impl AudioProcessor {
         Ok(())
     }
 
-    /// Encode a single track to CMAF segments
+    /// Encode a single track to CMAF segments under `album_dir/track_{disc}_{track}/`.
     async fn encode_track(
         &self,
         album: &AlbumInfo,
         track: &crate::scan::TrackInfo,
-        output_base: &Path,
+        album_dir: &Path,
         album_id: &str,
         progress: Option<(usize, usize)>,
     ) -> Result<()> {
-        // Create output directory:
-        // media/albums/{id} - {artist} - {album_name}/track_{disc}_{track}/{profile_name}/
-        let artist_dir = album.artist.replace(" ", "_");
-        let album_name = album.name.replace(" ", "_");
-        let album_dir = output_base.join(format!(
-            "albums/{} - {} - {}",
-            album_id, artist_dir, album_name
-        ));
         let track_dir = album_dir.join(format!(
             "track_{}_{}",
             track.disc_number, track.track_number
@@ -98,14 +97,22 @@ impl AudioProcessor {
         let segment_count = (duration / self.segment_duration).ceil() as u32;
 
         if let Some((idx, total)) = progress {
-            println!(
+            tracing::info!(
                 "[{} | {}] [{}/{}] {} - Duration: {:.1}s",
-                album_id, album.name, idx, total, track.title, duration,
+                album_id,
+                album.name,
+                idx,
+                total,
+                track.title,
+                duration,
             );
         } else {
-            println!(
+            tracing::info!(
                 "[{} | {}] {} - Duration: {:.1}s",
-                album_id, album.name, track.title, duration,
+                album_id,
+                album.name,
+                track.title,
+                duration,
             );
         }
 
@@ -115,46 +122,59 @@ impl AudioProcessor {
 
             let ffmpeg_codec = config::ffmpeg_codec_for_profile(profile)?;
 
-            // FFmpeg command for CMAF encoding.
-            let cmd = format!(
-                r#"ffmpeg -i "{}" \
-  -vn \
-  -c:a {} \
-  -b:a {} \
-  -ar {} \
-  -ac {} \
-  -f dash \
-  -use_timeline 1 \
-  -seg_duration {} \
-  -frag_duration {} \
-  -use_template 1 \
-  -dash_segment_type mp4 \
-  -init_seg_name 'init.mp4' \
-  -media_seg_name 'chunk_$Number%03d$.m4s' \
-  -ldash 1 \
-  -write_prft 1 \
-  -movflags +frag_keyframe+empty_moov+default_base_moof+dash \
-  -strict experimental \
-  "{}/manifest.mpd" \
-  -loglevel error -y"#,
-                track.path.display(),
-                ffmpeg_codec,
-                profile.bitrate,
-                profile.sample_rate,
-                profile.channels,
-                self.segment_duration,
-                self.segment_duration,
-                profile_dir.display()
-            );
+            let input_path = track.path.to_str().ok_or_else(|| {
+                anyhow!("Non-UTF-8 input path: {}", track.path.display())
+            })?;
+            let manifest_path = profile_dir.join("manifest.mpd");
+            let manifest_arg = manifest_path.to_str().ok_or_else(|| {
+                anyhow!("Non-UTF-8 manifest path: {}", manifest_path.display())
+            })?;
+            let seg_duration = self.segment_duration.to_string();
 
-            let status = Command::new("sh").arg("-c").arg(&cmd).output().await?;
+            let output = Command::new("ffmpeg")
+                .kill_on_drop(true)
+                .args([
+                    "-i", input_path,
+                    "-vn",
+                    "-c:a", ffmpeg_codec,
+                    "-b:a", &profile.bitrate,
+                    "-ar", &profile.sample_rate.to_string(),
+                    "-ac", &profile.channels.to_string(),
+                    "-f", "dash",
+                    "-use_timeline", "1",
+                    "-seg_duration", &seg_duration,
+                    "-frag_duration", &seg_duration,
+                    "-use_template", "1",
+                    "-dash_segment_type", "mp4",
+                    "-init_seg_name", "init.mp4",
+                    "-media_seg_name", "chunk_$Number%03d$.m4s",
+                    "-ldash", "1",
+                    "-write_prft", "1",
+                    "-movflags", "+frag_keyframe+empty_moov+default_base_moof+dash",
+                    "-strict", "experimental",
+                    manifest_arg,
+                    "-loglevel", "error",
+                    "-y",
+                ])
+                .output()
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "Failed to spawn ffmpeg for {} (profile {}): {}",
+                        track.path.display(),
+                        profile.name,
+                        e
+                    )
+                })?;
 
-            if !status.status.success() {
-                let stderr = String::from_utf8_lossy(&status.stderr);
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
                 return Err(anyhow!(
-                    "FFmpeg encoding failed (profile {}): {}",
+                    "ffmpeg failed on {} (profile {}, exit {}): {}",
+                    track.path.display(),
                     profile.name,
-                    stderr.lines().last().unwrap_or("Unknown error")
+                    output.status,
+                    stderr.lines().last().unwrap_or("no stderr output").trim(),
                 ));
             }
 
@@ -168,8 +188,8 @@ impl AudioProcessor {
             }
         }
 
-        println!(
-            "✓ [{} | {}] {} Generated {} segments ({} profiles)",
+        tracing::info!(
+            "[{} | {}] {} Generated {} segments ({} profiles)",
             album_id,
             album.name,
             track.title,
@@ -182,16 +202,28 @@ impl AudioProcessor {
 
     /// Get audio file duration using ffprobe
     async fn get_duration(&self, path: &Path) -> Result<f64> {
-        let cmd = format!(
-            r#"ffprobe -v quiet -print_format json -show_format "{}" "#,
-            path.display()
-        );
-
-        let output = Command::new("sh").arg("-c").arg(&cmd).output().await?;
+        let output = Command::new("ffprobe")
+            .kill_on_drop(true)
+            .args([
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                path.to_str()
+                    .ok_or_else(|| anyhow!("Non-UTF-8 file path: {}", path.display()))?,
+            ])
+            .output()
+            .await
+            .map_err(|e| anyhow!("Failed to spawn ffprobe on {}: {}", path.display(), e))?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("ffprobe failed: {}", stderr));
+            return Err(anyhow!(
+                "ffprobe failed on {} (exit {}): {}",
+                path.display(),
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim(),
+            ));
         }
 
         let json_str = String::from_utf8_lossy(&output.stdout);

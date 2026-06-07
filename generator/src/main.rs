@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::{Path, PathBuf};
 
@@ -108,7 +108,10 @@ async fn main() -> Result<()> {
         tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
     };
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
 
     match args.command {
         Commands::Generate {
@@ -139,20 +142,20 @@ async fn generate(
     let metadata_dir = output_dir.join("metadata");
 
     if scan {
-        println!("Generating albums by scanning directories:");
+        tracing::info!("Generating albums by scanning directories:");
     } else {
-        println!("Generating albums from album directories:");
+        tracing::info!("Generating albums from album directories:");
     }
     for i in &album_dirs {
-        println!("  - {}", i.display());
+        tracing::info!("  - {}", i.display());
     }
-    println!("Output dir: {}", output_dir.display());
-    println!("Media dir: {}", output_media.display());
-    println!("Metadata dir: {}", metadata_dir.display());
-    println!("Parallel jobs: {}", jobs);
+    tracing::info!("Output dir: {}", output_dir.display());
+    tracing::info!("Media dir: {}", output_media.display());
+    tracing::info!("Metadata dir: {}", metadata_dir.display());
+    tracing::info!("Parallel jobs: {}", jobs);
 
     if let Some(ref f) = filter {
-        println!("Filter: {}", f);
+        tracing::info!("Filter: {}", f);
     }
 
     let cfg = config::GeneratorConfig::load(&config_path)?;
@@ -206,13 +209,13 @@ async fn generate(
                 || re.is_match(&album.name)
                 || re.is_match(&format!("{} - {}", album.artist, album.name))
         });
-        println!(
+        tracing::info!(
             "Filtered to {} albums (from {})",
             albums.len(),
             original_count
         );
     } else {
-        println!("Found {} albums", albums.len());
+        tracing::info!("Found {} albums", albums.len());
     }
 
     if albums.is_empty() {
@@ -247,57 +250,60 @@ async fn generate(
         let job_semaphore = job_semaphore.clone();
 
         let task = tokio::spawn(async move {
-            println!(
-                "\n{} Processing: {} by {}",
+            tracing::info!(
+                "{} Processing: {} by {}",
                 album_log_prefix(&album_id, &album_info),
                 album_info.name,
                 album_info.artist
             );
             warn_album_tag_issues(&album_id, &album_info);
 
-            let processor = AudioProcessor::new(segment_duration_seconds, profiles.clone());
-            if let Err(e) = processor
-                .process_album(&album_info, &output_media, &album_id, job_semaphore.clone())
-                .await
-            {
-                eprintln!(
+            // Atomic-per-album: encode + cover go into a staging directory, then we
+            // atomically swap with the final location. Any failure before commit only
+            // touches the staging dir; an existing prior good encode is untouched.
+            let artist_dir = album_info.artist.replace(" ", "_");
+            let album_name = album_info.name.replace(" ", "_");
+            let album_dir_name = format!("{} - {} - {}", album_id, artist_dir, album_name);
+            let albums_root = output_media.join("albums");
+            let final_album_dir = albums_root.join(&album_dir_name);
+            let staging_album_dir = albums_root.join(format!("{}.tmp", &album_dir_name));
+
+            let result = run_album(
+                &album_info,
+                &album_id,
+                &profiles,
+                segment_duration_seconds,
+                &output_media,
+                &metadata_dir,
+                &final_album_dir,
+                &staging_album_dir,
+                job_semaphore.clone(),
+                metadata_lock.clone(),
+            )
+            .await;
+
+            if let Err(e) = &result {
+                tracing::error!(
                     "{} Error processing album: {}",
                     album_log_prefix(&album_id, &album_info),
                     e
                 );
-                return Err(e);
+                // Best-effort cleanup of the staging dir if it still exists. After a
+                // successful media commit (staging→final rename) the staging path is
+                // gone and this is a no-op; after a failed YAML write `run_album`
+                // already rolled back the final dir.
+                let _ = std::fs::remove_dir_all(&staging_album_dir);
             }
-
-            // Copy cover image
-            if let Err(e) = copy_cover_image(&album_info, &output_media, &album_id) {
-                eprintln!(
-                    "{} Error copying cover: {}",
-                    album_log_prefix(&album_id, &album_info),
-                    e
-                );
-                return Err(e);
-            }
-
-            // Avoid concurrent writers touching the same metadata directory.
-            // (Encoding is parallel; metadata updates are quick and serialized.)
-            let _guard = metadata_lock.lock().await;
-            db::importer::import_album(
-                &metadata_dir,
-                &output_media,
-                &profiles,
-                album_info.clone(),
-                Some(album_id.clone()),
-            )
-            .await?;
+            result?;
 
             let done = completed.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-            println!(
+            tracing::info!(
                 "[{}/{}] {} Completed",
                 done,
                 total,
                 album_log_prefix(&album_id, &album_info)
             );
-            Ok(())
+            Result::<()>::Ok(())
         });
 
         tasks.push(task);
@@ -308,12 +314,12 @@ async fn generate(
         task.await??;
     }
 
-    println!("\n✓ Generate complete");
+    tracing::info!("Generate complete");
     Ok(())
 }
 
-/// Copy cover image from source to album directory in output storage
-fn copy_cover_image(album: &scan::AlbumInfo, output: &Path, album_id: &str) -> Result<()> {
+/// Copy cover image from source into `album_dir`.
+fn copy_cover_image(album: &scan::AlbumInfo, album_dir: &Path) -> Result<()> {
     if !album.cover_path.exists() {
         return Err(anyhow::anyhow!(
             "Cover image not found at {}",
@@ -321,18 +327,8 @@ fn copy_cover_image(album: &scan::AlbumInfo, output: &Path, album_id: &str) -> R
         ));
     }
 
-    // Build target directory: output/albums/{album_id} - {artist} - {album_name}
-    let artist_dir = album.artist.replace(" ", "_");
-    let album_name = album.name.replace(" ", "_");
-    let album_dir = output.join(format!(
-        "albums/{} - {} - {}",
-        album_id, artist_dir, album_name
-    ));
+    std::fs::create_dir_all(album_dir)?;
 
-    // Create album directory if it doesn't exist
-    std::fs::create_dir_all(&album_dir)?;
-
-    // Copy cover image with original filename
     let cover_filename = album
         .cover_path
         .file_name()
@@ -342,4 +338,88 @@ fn copy_cover_image(album: &scan::AlbumInfo, output: &Path, album_id: &str) -> R
     std::fs::copy(&album.cover_path, &target_path)?;
 
     Ok(())
+}
+
+/// Per-album atomic worker.
+///
+/// All on-disk effects for this album are confined to either:
+/// - `staging_album_dir` (during encode); removed on failure, renamed to `final_album_dir`
+///   on success.
+/// - the metadata YAML for this album_id; only written *after* the media commit.
+///
+/// If the metadata write fails after the media commit, we roll the media dir back to its
+/// pre-run absence (we cannot restore a prior good encode that was replaced; re-run to
+/// regenerate). The function never leaves a half-encoded album dir behind.
+#[allow(clippy::too_many_arguments)]
+async fn run_album(
+    album_info: &scan::AlbumInfo,
+    album_id: &str,
+    profiles: &[config::AudioProfile],
+    segment_duration_seconds: f64,
+    output_media: &Path,
+    metadata_dir: &Path,
+    final_album_dir: &Path,
+    staging_album_dir: &Path,
+    job_semaphore: std::sync::Arc<tokio::sync::Semaphore>,
+    metadata_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
+) -> Result<()> {
+    // Ensure a clean staging directory. A leftover from a previous aborted run would
+    // otherwise pollute this encode.
+    if staging_album_dir.exists() {
+        std::fs::remove_dir_all(staging_album_dir).with_context_path(staging_album_dir)?;
+    }
+
+    let processor = AudioProcessor::new(segment_duration_seconds, profiles.to_vec());
+    processor
+        .process_album(album_info, staging_album_dir, album_id, job_semaphore)
+        .await?;
+
+    copy_cover_image(album_info, staging_album_dir)?;
+
+    // ---- Media commit: atomic swap of staging into the final album path. ----
+    // If a prior final dir exists (re-encode) we remove it first; rename replaces nothing
+    // atomically when target exists for directories, so this is the unavoidable window.
+    if let Some(parent) = final_album_dir.parent() {
+        std::fs::create_dir_all(parent).with_context_path(parent)?;
+    }
+    if final_album_dir.exists() {
+        std::fs::remove_dir_all(final_album_dir).with_context_path(final_album_dir)?;
+    }
+    std::fs::rename(staging_album_dir, final_album_dir).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to commit album {} -> {}: {}",
+            staging_album_dir.display(),
+            final_album_dir.display(),
+            e
+        )
+    })?;
+
+    // ---- Metadata commit. If this fails, roll the media commit back so the on-disk
+    // state remains atomic-per-album (either fully present or fully absent). ----
+    let _guard = metadata_lock.lock().await;
+    if let Err(e) = db::importer::import_album(
+        metadata_dir,
+        output_media,
+        profiles,
+        album_info.clone(),
+        Some(album_id.to_string()),
+    )
+    .await
+    {
+        let _ = std::fs::remove_dir_all(final_album_dir);
+        return Err(e);
+    }
+
+    Ok(())
+}
+
+/// Small extension to attach a path to an io error for better context.
+trait WithContextPath<T> {
+    fn with_context_path(self, path: &Path) -> Result<T>;
+}
+
+impl<T> WithContextPath<T> for std::io::Result<T> {
+    fn with_context_path(self, path: &Path) -> Result<T> {
+        self.with_context(|| path.display().to_string())
+    }
 }

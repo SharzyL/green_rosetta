@@ -682,25 +682,39 @@ pub async fn import_album(
         tracks,
     };
 
-    // Write album YAML (rename old file if album name/artist changed).
+    // Write album YAML atomically: write to a temp file in the same directory, then
+    // rename onto the target. `rename` is atomic on POSIX and replaces any existing
+    // target, so a crash mid-write cannot leave a corrupt YAML at the canonical path.
     let album_dir = album_dir_name(&album.id, &album.artist, &album.name);
     let target_path = metadata_dir.join(format!("{}.yaml", album_dir));
+    let tmp_path = metadata_dir.join(format!(".{}.yaml.tmp", album.id));
 
-    if let Some(existing_path) = find_album_yaml_by_id(metadata_dir, &album.id)?
-        && existing_path != target_path
-    {
-        std::fs::rename(&existing_path, &target_path).with_context(|| {
-            format!(
-                "Rename album metadata {} -> {}",
-                existing_path.display(),
-                target_path.display()
-            )
-        })?;
-    }
+    // Locate any existing YAML for this album_id *before* writing the new one, so we
+    // never call `find_album_yaml_by_id` while two files for the same id coexist (it
+    // errors in that case).
+    let stale_path = find_album_yaml_by_id(metadata_dir, &album.id)?
+        .filter(|p| p != &target_path);
 
     let yaml = serde_yaml::to_string(&album)?;
-    std::fs::write(&target_path, yaml)
-        .with_context(|| format!("Write album metadata {}", target_path.display()))?;
+    std::fs::write(&tmp_path, &yaml)
+        .with_context(|| format!("Write temp album metadata {}", tmp_path.display()))?;
+
+    if let Err(e) = std::fs::rename(&tmp_path, &target_path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(anyhow!(
+            "Commit album metadata {}: {}",
+            target_path.display(),
+            e
+        ));
+    }
+
+    // Two YAMLs for one album_id may briefly coexist between the rename above and the
+    // remove below; that's preferable to a window where no YAML exists (which a crash
+    // would make permanent).
+    if let Some(stale) = stale_path {
+        std::fs::remove_file(&stale)
+            .with_context(|| format!("Remove stale album metadata {}", stale.display()))?;
+    }
 
     Ok(())
 }

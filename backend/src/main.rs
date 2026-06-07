@@ -420,7 +420,10 @@ async fn main() -> Result<()> {
             }
         })
     };
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
 
     if config.streaming.suggested_presentation_delay <= 0.0 {
         tracing::warn!(

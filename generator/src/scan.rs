@@ -111,7 +111,7 @@ impl Scanner {
                 match self.scan_album(&entry_path) {
                     Ok(album) => albums.push(album),
                     Err(e) => {
-                        eprintln!("Warning: Failed to scan {}: {}", entry_path.display(), e);
+                        tracing::warn!("Failed to scan {}: {}", entry_path.display(), e);
                     }
                 }
             }
@@ -178,8 +178,8 @@ impl Scanner {
                         });
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Warning: Failed to extract metadata from {}: {}",
+                        tracing::warn!(
+                            "Failed to extract metadata from {}: {}",
                             entry_path.display(),
                             e
                         );
