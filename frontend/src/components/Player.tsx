@@ -20,6 +20,8 @@ interface PlayerProps {
   onAutoplayBlockedChange?: (blocked: boolean) => void;
   onTrackIdChange?: (trackId: string) => void;
   onPeriodStartSecondsChange?: (startSeconds: number) => void;
+  // Optional handle so debug tooling can poll dash.js internals; not used for playback.
+  playerInstanceRef?: RefObject<MediaPlayerClass | null>;
 }
 
 const Player = React.memo(
@@ -29,6 +31,7 @@ const Player = React.memo(
     onAutoplayBlockedChange,
     onTrackIdChange,
     onPeriodStartSecondsChange,
+    playerInstanceRef,
   }: PlayerProps): ReactElement => {
     // We attempt auto-play; if blocked by the browser, UI elsewhere can prompt for a gesture.
     const onAutoplayBlockedChangeRef =
@@ -59,11 +62,10 @@ const Player = React.memo(
       videoElement.volume = loadVolume(0.8);
       videoElement.muted = loadMuted();
 
-      console.log("Initializing DASH player");
-
       // Create and configure player
       const player = MediaPlayer().create();
       playerRef.current = player;
+      if (playerInstanceRef) playerInstanceRef.current = player;
 
       // Configure DASH.js settings
       player.updateSettings({
@@ -149,17 +151,11 @@ const Player = React.memo(
         const currentLatency =
           player.getCurrentLiveLatency() - player.getTargetLiveDelay();
 
-        console.log(
-          `Period switch: latency=${currentLatency}`,
-          e.toStreamInfo?.id,
-        );
-
         emitPeriodInfo(e.toStreamInfo);
 
         if (currentLatency < -1.0) {
           const waitTimeSeconds = 1.0;
           const waitTimeMs = waitTimeSeconds * 1000;
-          console.log(`Period switch: will pause for ${waitTimeMs}ms (${e})`);
 
           player.pause();
 
@@ -183,13 +179,6 @@ const Player = React.memo(
       // Register video element event listeners
       videoElement.addEventListener("play", handleVideoPlay);
 
-      const diagnosticInterval = setInterval(() => {
-        console.log("debug[live latency]", {
-          clientTime: new Date().toISOString(),
-          offset: player.getCurrentLiveLatency() - player.getTargetLiveDelay(),
-        });
-      }, 10000);
-
       // Cleanup on unmount
       return () => {
         player.off(events.STREAM_INITIALIZED, handleStreamInitialized);
@@ -199,10 +188,10 @@ const Player = React.memo(
         videoElement.removeEventListener("play", handleVideoPlay);
 
         player.destroy();
-        clearInterval(diagnosticInterval);
         playerRef.current = null;
+        if (playerInstanceRef) playerInstanceRef.current = null;
       };
-    }, [manifestUrl, videoRef]);
+    }, [manifestUrl, videoRef, playerInstanceRef]);
 
     return (
       <div className="player-wrapper">

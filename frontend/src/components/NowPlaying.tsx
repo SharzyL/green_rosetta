@@ -3,6 +3,7 @@ import {
   type RefObject,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import "./NowPlaying.css";
@@ -27,6 +28,7 @@ interface NowPlayingProps {
   periodStartSeconds: number | null;
   autoplayBlocked: boolean;
   onAutoplayRecovered: () => void;
+  onActivateDebug?: () => void;
 }
 
 function NowPlaying({
@@ -35,6 +37,7 @@ function NowPlaying({
   periodStartSeconds,
   autoplayBlocked,
   onAutoplayRecovered,
+  onActivateDebug,
 }: NowPlayingProps): ReactElement {
   const isLoading = !nowPlaying;
 
@@ -42,6 +45,23 @@ function NowPlaying({
   const [coverStatus, setCoverStatus] = useState<
     "idle" | "loading" | "loaded" | "error"
   >("idle");
+  const imgRef = useRef<HTMLImageElement>(null);
+  const debugClicksRef = useRef<number[]>([]);
+
+  // Reveal the hidden debug panel after five clicks on the cover within 2s
+  // (the classic "tap the version number" gesture).
+  const handleCoverClick = () => {
+    if (!onActivateDebug) return;
+    const now = performance.now();
+    const recent = [...debugClicksRef.current, now].filter(
+      (t) => now - t < 2000,
+    );
+    debugClicksRef.current = recent;
+    if (recent.length >= 5) {
+      debugClicksRef.current = [];
+      onActivateDebug();
+    }
+  };
 
   useEffect(() => {
     if (!nowPlaying) {
@@ -80,6 +100,14 @@ function NowPlaying({
       return;
     }
     setCoverStatus("loading");
+
+    // Cached images may already be complete by the time this effect runs, so the
+    // <img> onLoad event never fires. Reconcile immediately to avoid getting stuck
+    // in the "loading" state.
+    const img = imgRef.current;
+    if (img && img.complete) {
+      setCoverStatus(img.naturalWidth > 0 ? "loaded" : "error");
+    }
   }, [coverUrl]);
 
   const progress = useMemo(() => {
@@ -95,7 +123,9 @@ function NowPlaying({
 
   return (
     <div className="now-playing">
-      <div className="cover-art">
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: hidden debug gesture, intentionally not keyboard-exposed */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: hidden debug gesture, intentionally not keyboard-exposed */}
+      <div className="cover-art" onClick={handleCoverClick}>
         {showCoverPlaceholder && (
           <div className="cover-art__placeholder" aria-hidden="true">
             {showCoverSpinner && (
@@ -105,6 +135,7 @@ function NowPlaying({
         )}
         {!!coverUrl && (
           <img
+            ref={imgRef}
             className={
               showCoverPlaceholder
                 ? "cover-art__img is-loading"

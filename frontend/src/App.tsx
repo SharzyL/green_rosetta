@@ -1,3 +1,4 @@
+import type { MediaPlayerClass } from "dashjs";
 import {
   type ReactElement,
   type RefObject,
@@ -9,6 +10,7 @@ import "./App.css";
 import AlbumTracklist, {
   type AlbumResponse,
 } from "./components/AlbumTracklist";
+import DebugPanel from "./components/DebugPanel";
 import NowPlaying from "./components/NowPlaying";
 import Player from "./components/Player";
 import { API_ENDPOINTS } from "./config";
@@ -30,12 +32,14 @@ function App(): ReactElement {
   const [trackInfo, setTrackInfo] = useState<TrackInfoData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playerInstanceRef = useRef<MediaPlayerClass | null>(null);
   const [currentAlbum, setCurrentAlbum] = useState<AlbumResponse | null>(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
   const [currentPeriodStartSeconds, setCurrentPeriodStartSeconds] = useState<
     number | null
   >(null);
+  const [debugMode, setDebugMode] = useState(false);
 
   useEffect(() => {
     const trackId = currentTrackId;
@@ -126,6 +130,7 @@ function App(): ReactElement {
             onAutoplayBlockedChange={setAutoplayBlocked}
             onTrackIdChange={setCurrentTrackId}
             onPeriodStartSecondsChange={setCurrentPeriodStartSeconds}
+            playerInstanceRef={playerInstanceRef}
           />
 
           <NowPlaying
@@ -134,6 +139,7 @@ function App(): ReactElement {
             periodStartSeconds={currentPeriodStartSeconds}
             autoplayBlocked={autoplayBlocked}
             onAutoplayRecovered={() => setAutoplayBlocked(false)}
+            onActivateDebug={() => setDebugMode((v) => !v)}
           />
 
           <AlbumTracklist
@@ -142,6 +148,18 @@ function App(): ReactElement {
           />
         </div>
       </div>
+
+      {debugMode && (
+        <DebugPanel
+          videoRef={videoRef}
+          playerInstanceRef={playerInstanceRef}
+          nowPlaying={trackInfo}
+          periodStartSeconds={currentPeriodStartSeconds}
+          autoplayBlocked={autoplayBlocked}
+          currentTrackId={currentTrackId}
+          onClose={() => setDebugMode(false)}
+        />
+      )}
     </div>
   );
 }
