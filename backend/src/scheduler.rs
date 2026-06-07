@@ -235,6 +235,60 @@ impl Scheduler {
         Ok(())
     }
 
+    /// Drop queued tracks whose album/track no longer exists (e.g. a reload deleted the album).
+    ///
+    /// Without this, a removed in-window track keeps "covering" its time slot, so `maintain`
+    /// never backfills it and `get_mpd_periods` renders nothing for that span. Pruning frees the
+    /// window so the future-coverage loop refills it with still-existing albums.
+    async fn prune_unresolvable(&self) {
+        // Common case touches only read locks; escalate to a write lock only when a track
+        // actually needs removing.
+        let needs_prune = {
+            let q = self.queue.read().await;
+            let db = self.db.read().await;
+            q.iter().any(|st| !db.has_track(&st.album_id, &st.track_id))
+        };
+        if !needs_prune {
+            return;
+        }
+
+        let mut q = self.queue.write().await;
+        let db = self.db.read().await;
+        let before = q.len();
+        q.retain(|st| db.has_track(&st.album_id, &st.track_id));
+        let removed = before - q.len();
+        if removed > 0 {
+            tracing::warn!(
+                "Pruned {removed} unresolvable scheduled track(s) after metadata change"
+            );
+        }
+    }
+
+    /// Seed an empty queue with the first enabled album's first track at the given start offset.
+    /// Used to recover the timeline when pruning emptied the queue.
+    async fn seed_at(&self, start_seconds: f64) -> anyhow::Result<()> {
+        let (album_id, track_id) = {
+            let db = self.db.read().await;
+            let enabled = db.get_enabled_albums();
+            let album = enabled
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("No enabled albums"))?;
+            let track = album
+                .tracks
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("Enabled album has no tracks"))?;
+            (album.id.clone(), track.id.clone())
+        };
+        let (_album, track) = self.get_album_track(&album_id, &track_id).await?;
+        self.queue.write().await.push_back(ScheduledTrack {
+            album_id,
+            track_id,
+            start_seconds,
+            duration_seconds: track.encoded_duration_seconds(),
+        });
+        Ok(())
+    }
+
     /// Ensure the schedule covers a window of interest.
     ///
     /// - Keep past coverage back to `t_now - time_shift_buffer_depth`.
@@ -249,33 +303,9 @@ impl Scheduler {
         let window_start = (t_now - time_shift_buffer_depth).max(0.0);
         let window_end = t_now + min_future_manifest_duration.max(0.0);
 
-        // Ensure the schedule reaches far enough into the future.
-        loop {
-            let needs_more = {
-                let q = self.queue.read().await;
-                q.back()
-                    .map(|t| t.end_seconds() < window_end)
-                    .unwrap_or(true)
-            };
-            if !needs_more {
-                break;
-            }
-            self.append_next().await?;
-        }
-
-        // Ensure we still cover window_start (in case the server has been up a long time).
-        loop {
-            let covers_start = {
-                let q = self.queue.read().await;
-                q.back()
-                    .map(|t| t.end_seconds() >= window_start)
-                    .unwrap_or(false)
-            };
-            if covers_start {
-                break;
-            }
-            self.append_next().await?;
-        }
+        // Remove tracks that no longer exist (e.g. a reload deleted their album) so they don't
+        // block backfill below or render as empty periods.
+        self.prune_unresolvable().await;
 
         // Drop tracks that are fully older than the window.
         loop {
@@ -289,6 +319,27 @@ impl Scheduler {
                 break;
             }
             self.queue.write().await.pop_front();
+        }
+
+        // If pruning/dropping emptied the queue (e.g. the only queued album was deleted), seed a
+        // fresh track at the live edge so the stream recovers instead of going silent.
+        if self.queue.read().await.is_empty() {
+            self.seed_at(t_now).await?;
+        }
+
+        // Ensure the schedule reaches far enough into the future. Appending from the (now valid)
+        // back also fills any span freed by pruning, since each track starts where the last ends.
+        loop {
+            let needs_more = {
+                let q = self.queue.read().await;
+                q.back()
+                    .map(|t| t.end_seconds() < window_end)
+                    .unwrap_or(true)
+            };
+            if !needs_more {
+                break;
+            }
+            self.append_next().await?;
         }
 
         Ok(())
@@ -340,5 +391,96 @@ impl Scheduler {
             }
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Album, Track};
+
+    fn test_track(id: &str) -> Track {
+        Track {
+            id: id.to_string(),
+            title: id.to_string(),
+            artist: None,
+            disc_number: 1,
+            track_number: 1,
+            length_seconds: 12.0,
+            representations: vec![],
+            // Legacy fields drive encoded_duration_seconds() -> 2 * 6.0 = 12s.
+            encoded_length_seconds: None,
+            init_segment_path: Some(format!("media/{id}/init.mp4")),
+            segment_path_template: Some(format!("media/{id}/chunk_$Number$.m4s")),
+            segment_count: Some(2),
+            segment_duration: Some(6.0),
+            segment_timescale: None,
+            segment_timeline: None,
+            source_file_path: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    fn test_album(id: &str, n_tracks: usize) -> Album {
+        Album {
+            id: id.to_string(),
+            name: id.to_string(),
+            artist: "Artist".to_string(),
+            release_date: None,
+            original_release_date: None,
+            media: None,
+            label: None,
+            catalog_number: None,
+            musicbrainz_album_id: None,
+            disc_count: 1,
+            cover_path: "cover.jpg".to_string(),
+            enabled: true,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+            images: vec![],
+            tracks: (0..n_tracks)
+                .map(|i| test_track(&format!("{id}_t{i}")))
+                .collect(),
+        }
+    }
+
+    /// Regression: deleting the album that's currently on air (so the whole manifest window is
+    /// that album) must not leave an empty manifest — the scheduler should prune it and refill
+    /// the window from the remaining albums.
+    #[tokio::test]
+    async fn manifest_recovers_when_currently_playing_album_is_deleted() {
+        let db = Arc::new(tokio::sync::RwLock::new(Database {
+            albums: vec![test_album("A", 3), test_album("B", 3), test_album("C", 3)],
+        }));
+        let scheduler = Scheduler::new(db.clone(), 0.0).await.unwrap();
+
+        let (tsbd, min_future) = (60.0, 30.0);
+
+        let periods = scheduler.get_mpd_periods(tsbd, min_future).await.unwrap();
+        assert!(
+            !periods.is_empty(),
+            "expected a populated manifest to start"
+        );
+
+        // Delete whichever album is currently playing.
+        let playing = scheduler
+            .scheduling_snapshot()
+            .await
+            .now_playing_album_id
+            .expect("an album should be on air");
+        {
+            let mut w = db.write().await;
+            w.albums.retain(|a| a.id != playing);
+        }
+
+        let periods = scheduler.get_mpd_periods(tsbd, min_future).await.unwrap();
+        assert!(
+            !periods.is_empty(),
+            "manifest went empty after deleting the currently-playing album"
+        );
+
+        // And the deleted album is no longer the one on air.
+        let snap = scheduler.scheduling_snapshot().await;
+        assert_ne!(snap.now_playing_album_id.as_deref(), Some(playing.as_str()));
     }
 }

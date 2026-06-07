@@ -268,6 +268,12 @@ impl Database {
         self.albums.iter().filter(|a| a.enabled).collect()
     }
 
+    /// Whether a specific track of a specific album currently exists (cheap; no cloning).
+    pub fn has_track(&self, album_id: &str, track_id: &str) -> bool {
+        self.get_album(album_id)
+            .is_some_and(|a| a.tracks.iter().any(|t| t.id == track_id))
+    }
+
     /// Get track by ID (searches across all albums)
     pub fn get_track(&self, track_id: &str) -> Option<(&Album, &Track)> {
         for album in &self.albums {
