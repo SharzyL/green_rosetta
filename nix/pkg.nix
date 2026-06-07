@@ -37,29 +37,28 @@ let
     '';
   });
 
-  bin = rustPlatform.buildRustPackage
-    {
-      inherit pname version;
+  bin = rustPlatform.buildRustPackage {
+    inherit pname version;
 
-      src = with lib.fileset; toSource {
-        root = ./..;
-        fileset = unions [
-          ../Cargo.toml
-          ../Cargo.lock
-          ../backend
-          ../generator
-        ];
-      };
-
-      passthru = { inherit frontend; };
-
-      cargoHash = "sha256-BVgEZdnEOWf47DRnewIUdkvobet4VLmuLT8zY/I46yA=";
-
-      # Build both workspace members
-      cargoBuildFlags = [ "--workspace" ];
-
-      doCheck = true;
+    src = with lib.fileset; toSource {
+      root = ./..;
+      fileset = unions [
+        ../Cargo.toml
+        ../Cargo.lock
+        ../backend
+        ../generator
+      ];
     };
+
+    passthru = { inherit frontend; };
+
+    cargoHash = "sha256-BVgEZdnEOWf47DRnewIUdkvobet4VLmuLT8zY/I46yA=";
+
+    # Build both workspace members
+    cargoBuildFlags = [ "--workspace" ];
+
+    doCheck = true;
+  };
 in
 runCommand bin.name { } ''
   mkdir -p $out/share/${pname}/www $out/bin

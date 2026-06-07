@@ -17,7 +17,14 @@
       shellOverride = pkgs: oldAttrs: {
         name = "${name}-dev-shell";
         version = null;
-        src = null;
+        src = with pkgs.lib.fileset; toSource {
+          root = ./.;
+          fileset = unions [
+            ./Cargo.toml
+            ./Cargo.lock
+          ];
+        };
+
         nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ (with pkgs; [
           clippy
           pnpm
