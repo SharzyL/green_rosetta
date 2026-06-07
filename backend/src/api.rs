@@ -266,16 +266,21 @@ pub(crate) async fn admin_reload(
 ) -> Result<Json<ReloadSummary>, (StatusCode, String)> {
     // De-dupe concurrent reloads: each load re-reads the whole metadata set (and, in S3 mode,
     // performs many network round-trips), so we only allow one at a time.
-    let _guard = state
-        .reload_lock
-        .try_lock()
-        .map_err(|_| (StatusCode::CONFLICT, "reload already in progress".to_string()))?;
+    let _guard = state.reload_lock.try_lock().map_err(|_| {
+        (
+            StatusCode::CONFLICT,
+            "reload already in progress".to_string(),
+        )
+    })?;
 
     // Build the new database OUTSIDE the db lock. On any error (e.g. malformed YAML) we return
     // here and the currently-serving database is left untouched (atomic swap-or-nothing).
-    let mut new_db = crate::load_database(&state.config)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("reload failed: {e:#}")))?;
+    let mut new_db = crate::load_database(&state.config).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("reload failed: {e:#}"),
+        )
+    })?;
 
     // Merge runtime-only enabled flags and swap atomically, holding the db lock only briefly.
     let summary = {

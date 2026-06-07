@@ -122,38 +122,57 @@ impl AudioProcessor {
 
             let ffmpeg_codec = config::ffmpeg_codec_for_profile(profile)?;
 
-            let input_path = track.path.to_str().ok_or_else(|| {
-                anyhow!("Non-UTF-8 input path: {}", track.path.display())
-            })?;
+            let input_path = track
+                .path
+                .to_str()
+                .ok_or_else(|| anyhow!("Non-UTF-8 input path: {}", track.path.display()))?;
             let manifest_path = profile_dir.join("manifest.mpd");
-            let manifest_arg = manifest_path.to_str().ok_or_else(|| {
-                anyhow!("Non-UTF-8 manifest path: {}", manifest_path.display())
-            })?;
+            let manifest_arg = manifest_path
+                .to_str()
+                .ok_or_else(|| anyhow!("Non-UTF-8 manifest path: {}", manifest_path.display()))?;
             let seg_duration = self.segment_duration.to_string();
 
             let output = Command::new("ffmpeg")
                 .kill_on_drop(true)
                 .args([
-                    "-i", input_path,
+                    "-i",
+                    input_path,
                     "-vn",
-                    "-c:a", ffmpeg_codec,
-                    "-b:a", &profile.bitrate,
-                    "-ar", &profile.sample_rate.to_string(),
-                    "-ac", &profile.channels.to_string(),
-                    "-f", "dash",
-                    "-use_timeline", "1",
-                    "-seg_duration", &seg_duration,
-                    "-frag_duration", &seg_duration,
-                    "-use_template", "1",
-                    "-dash_segment_type", "mp4",
-                    "-init_seg_name", "init.mp4",
-                    "-media_seg_name", "chunk_$Number%03d$.m4s",
-                    "-ldash", "1",
-                    "-write_prft", "1",
-                    "-movflags", "+frag_keyframe+empty_moov+default_base_moof+dash",
-                    "-strict", "experimental",
+                    "-c:a",
+                    ffmpeg_codec,
+                    "-b:a",
+                    &profile.bitrate,
+                    "-ar",
+                    &profile.sample_rate.to_string(),
+                    "-ac",
+                    &profile.channels.to_string(),
+                    "-f",
+                    "dash",
+                    "-use_timeline",
+                    "1",
+                    "-seg_duration",
+                    &seg_duration,
+                    "-frag_duration",
+                    &seg_duration,
+                    "-use_template",
+                    "1",
+                    "-dash_segment_type",
+                    "mp4",
+                    "-init_seg_name",
+                    "init.mp4",
+                    "-media_seg_name",
+                    "chunk_$Number%03d$.m4s",
+                    "-ldash",
+                    "1",
+                    "-write_prft",
+                    "1",
+                    "-movflags",
+                    "+frag_keyframe+empty_moov+default_base_moof+dash",
+                    "-strict",
+                    "experimental",
                     manifest_arg,
-                    "-loglevel", "error",
+                    "-loglevel",
+                    "error",
                     "-y",
                 ])
                 .output()

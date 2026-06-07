@@ -692,8 +692,7 @@ pub async fn import_album(
     // Locate any existing YAML for this album_id *before* writing the new one, so we
     // never call `find_album_yaml_by_id` while two files for the same id coexist (it
     // errors in that case).
-    let stale_path = find_album_yaml_by_id(metadata_dir, &album.id)?
-        .filter(|p| p != &target_path);
+    let stale_path = find_album_yaml_by_id(metadata_dir, &album.id)?.filter(|p| p != &target_path);
 
     let yaml = serde_yaml::to_string(&album)?;
     std::fs::write(&tmp_path, &yaml)

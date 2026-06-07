@@ -246,8 +246,11 @@ impl Database {
     /// in the old DB are dropped; albums new in this DB keep their default (enabled).
     pub fn inherit_enabled_from(&mut self, old: &Database) {
         use std::collections::HashMap;
-        let prev: HashMap<&str, bool> =
-            old.albums.iter().map(|a| (a.id.as_str(), a.enabled)).collect();
+        let prev: HashMap<&str, bool> = old
+            .albums
+            .iter()
+            .map(|a| (a.id.as_str(), a.enabled))
+            .collect();
         for a in &mut self.albums {
             if let Some(&enabled) = prev.get(a.id.as_str()) {
                 a.enabled = enabled;

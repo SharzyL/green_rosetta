@@ -241,7 +241,7 @@ async fn generate(
     // Process albums in parallel
     let mut tasks = Vec::new();
 
-    for (album_info, album_id) in albums.into_iter().zip(album_ids.into_iter()) {
+    for (album_info, album_id) in albums.into_iter().zip(album_ids) {
         let output_media = output_media.clone();
         let metadata_dir = metadata_dir.clone();
         let completed = completed.clone();
