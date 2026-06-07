@@ -239,6 +239,22 @@ impl Database {
         Ok(Database { albums })
     }
 
+    /// Carry over runtime-only `enabled` flags from a previous database, matched by album id.
+    ///
+    /// `enabled` is admin-controlled and not persisted in YAML (a freshly loaded `Database` has
+    /// every album enabled), so a reload must re-apply the previous toggles. Albums present only
+    /// in the old DB are dropped; albums new in this DB keep their default (enabled).
+    pub fn inherit_enabled_from(&mut self, old: &Database) {
+        use std::collections::HashMap;
+        let prev: HashMap<&str, bool> =
+            old.albums.iter().map(|a| (a.id.as_str(), a.enabled)).collect();
+        for a in &mut self.albums {
+            if let Some(&enabled) = prev.get(a.id.as_str()) {
+                a.enabled = enabled;
+            }
+        }
+    }
+
     /// Get album by ID
     pub fn get_album(&self, id: &str) -> Option<&Album> {
         self.albums.iter().find(|a| a.id == id)

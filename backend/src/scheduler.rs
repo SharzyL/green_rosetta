@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use rand::seq::SliceRandom;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 
 use crate::db::{Album, Database, Track};
@@ -23,6 +23,17 @@ pub struct Scheduler {
     mpd_start_time: DateTime<Utc>,
     queue: Arc<tokio::sync::RwLock<VecDeque<ScheduledTrack>>>,
     db: Arc<tokio::sync::RwLock<Database>>,
+}
+
+/// A point-in-time view of which albums the scheduler currently has on air or queued ahead.
+#[derive(Debug, Clone, Default)]
+pub struct SchedulingSnapshot {
+    /// Album whose track spans the current playback instant, if any.
+    pub now_playing_album_id: Option<String>,
+    /// Albums with tracks scheduled in the future part of the window (excludes the now-playing
+    /// track; an album may still be both now-playing and queued, which `now_playing` takes
+    /// precedence over when rendering a single badge).
+    pub queued_album_ids: HashSet<String>,
 }
 
 impl Scheduler {
@@ -103,6 +114,25 @@ impl Scheduler {
         (Utc::now() - self.mpd_start_time).num_milliseconds() as f64 / 1000.0
     }
 
+    /// Snapshot which albums are currently playing / queued ahead, based on the current queue.
+    ///
+    /// Relies on `maintain` having been run for the current window (the request middleware does
+    /// this on every request), so the future part of the queue is already populated. This is a
+    /// momentary view: the now-playing album advances over time, so callers should re-query.
+    pub async fn scheduling_snapshot(&self) -> SchedulingSnapshot {
+        let t_now = self.t_now_seconds();
+        let q = self.queue.read().await;
+        let mut snap = SchedulingSnapshot::default();
+        for st in q.iter() {
+            if st.start_seconds <= t_now && t_now < st.end_seconds() {
+                snap.now_playing_album_id = Some(st.album_id.clone());
+            } else if st.start_seconds > t_now {
+                snap.queued_album_ids.insert(st.album_id.clone());
+            }
+        }
+        snap
+    }
+
     async fn get_album_track(
         &self,
         album_id: &str,
@@ -128,12 +158,13 @@ impl Scheduler {
         current_track_id: &str,
     ) -> anyhow::Result<(String, String)> {
         let db = self.db.read().await;
-        let current_album = db
-            .get_album(current_album_id)
-            .ok_or_else(|| anyhow::anyhow!("Album not found: {}", current_album_id))?;
+        // The current album may have been removed by a metadata reload. Treat a missing album the
+        // same as a disabled one: fall through to picking the next enabled album.
+        let current_album = db.get_album(current_album_id);
 
-        // Only continue within the current album if it is still enabled.
-        if current_album.enabled
+        // Only continue within the current album if it still exists and is enabled.
+        if let Some(current_album) = current_album
+            && current_album.enabled
             && let Some(pos) = current_album
                 .tracks
                 .iter()
@@ -150,8 +181,8 @@ impl Scheduler {
             return Err(anyhow::anyhow!("No enabled albums"));
         }
 
-        // If the current album isn't enabled, just pick the first enabled album.
-        if !current_album.enabled {
+        // If the current album is gone or disabled, just pick the first enabled album.
+        if current_album.is_none_or(|a| !a.enabled) {
             let first_album = enabled[0];
             let first_track = first_album
                 .tracks
@@ -268,8 +299,14 @@ impl Scheduler {
         time_shift_buffer_depth: f64,
         min_future_manifest_duration: f64,
     ) -> anyhow::Result<Vec<(Track, f64, f64)>> {
-        self.maintain(time_shift_buffer_depth, min_future_manifest_duration)
-            .await?;
+        // Best-effort: if maintenance fails (e.g. a reload left no enabled albums to schedule),
+        // still serve whatever is already in the window rather than failing the whole manifest.
+        if let Err(e) = self
+            .maintain(time_shift_buffer_depth, min_future_manifest_duration)
+            .await
+        {
+            tracing::warn!("scheduler maintain failed (serving existing window): {e}");
+        }
 
         let t_now = self.t_now_seconds();
         let window_start = (t_now - time_shift_buffer_depth).max(0.0);
@@ -286,8 +323,21 @@ impl Scheduler {
 
         let mut out = Vec::with_capacity(scheduled.len());
         for st in scheduled {
-            let (_album, track) = self.get_album_track(&st.album_id, &st.track_id).await?;
-            out.push((track, st.start_seconds, st.duration_seconds));
+            // A track may have vanished from the database after a reload removed its album. Skip
+            // that period (leaving a harmless gap at its original start time) instead of failing
+            // the whole manifest for every listener. We keep the surviving periods' original
+            // start_seconds so the timeline stays anchored and clients don't resync.
+            match self.get_album_track(&st.album_id, &st.track_id).await {
+                Ok((_album, track)) => out.push((track, st.start_seconds, st.duration_seconds)),
+                Err(e) => {
+                    tracing::warn!(
+                        album_id = %st.album_id,
+                        track_id = %st.track_id,
+                        "scheduled track no longer in metadata after reload; skipping period: {e}"
+                    );
+                    continue;
+                }
+            }
         }
         Ok(out)
     }

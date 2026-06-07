@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   admin_albums: () => `${API_BASE_URL}/api/admin/albums`,
   admin_album_enabled: (albumId: string) =>
     `${API_BASE_URL}/api/admin/albums/${encodeURIComponent(albumId)}/enabled`,
+  admin_reload: () => `${API_BASE_URL}/api/admin/reload`,
   manifest: () => `${API_BASE_URL}/stream/manifest.mpd`,
 };
 

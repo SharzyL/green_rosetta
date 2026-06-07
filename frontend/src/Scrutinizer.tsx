@@ -16,6 +16,15 @@ interface AdminAlbum {
   enabled: boolean;
   track_count: number;
   cover_url: string;
+  scheduling_state?: "playing" | "queued" | null;
+}
+
+interface ReloadSummary {
+  albums_before: number;
+  albums_after: number;
+  added: number;
+  removed: number;
+  kept_disabled: number;
 }
 
 const Scrutinizer = (): ReactElement => {
@@ -27,6 +36,10 @@ const Scrutinizer = (): ReactElement => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
+  const [reloading, setReloading] = useState<boolean>(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Albums newly discovered by the most recent reload, highlighted until the next manual refresh.
+  const [newAlbumIds, setNewAlbumIds] = useState<Set<string>>(() => new Set());
 
   const checkSession = useCallback(async () => {
     try {
@@ -51,9 +64,11 @@ const Scrutinizer = (): ReactElement => {
     }
   }, []);
 
-  const fetchAlbums = useCallback(async () => {
+  const fetchAlbums = useCallback(async (): Promise<AdminAlbum[] | null> => {
     setLoading(true);
     setError(null);
+    // A fresh listing clears any "new album" highlight from a previous reload.
+    setNewAlbumIds(new Set());
     try {
       const res = await fetch(API_ENDPOINTS.admin_albums(), {
         credentials: "include",
@@ -61,13 +76,50 @@ const Scrutinizer = (): ReactElement => {
       if (!res.ok) throw new Error(`Admin albums API error: ${res.status}`);
       const data = (await res.json()) as AdminAlbum[];
       setAlbums(data);
+      return data;
     } catch (e) {
       console.error("Failed to load admin albums:", e);
       setError(e instanceof Error ? e.message : "Unknown error");
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const reloadMetadata = useCallback(async () => {
+    setReloading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const prevIds = new Set(albums.map((a) => a.album_id));
+      const res = await fetch(API_ENDPOINTS.admin_reload(), {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(`Reload failed: ${res.status} ${msg}`);
+      }
+      const summary = (await res.json()) as ReloadSummary;
+      // Re-fetch the listing, then highlight albums absent from the previous view.
+      const data = await fetchAlbums();
+      if (data) {
+        const added = data
+          .filter((a) => !prevIds.has(a.album_id))
+          .map((a) => a.album_id);
+        setNewAlbumIds(new Set(added));
+      }
+      setNotice(
+        `Reloaded: ${summary.added} added, ${summary.removed} removed, ` +
+          `${summary.albums_after} albums total.`,
+      );
+    } catch (e) {
+      console.error("Failed to reload metadata:", e);
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setReloading(false);
+    }
+  }, [albums, fetchAlbums]);
 
   useEffect(() => {
     const run = async () => {
@@ -193,7 +245,19 @@ const Scrutinizer = (): ReactElement => {
                 <button
                   type="button"
                   className="scrutinizer__button"
+                  onClick={() => void reloadMetadata()}
+                  disabled={reloading}
+                  title="Re-read metadata from storage on the server"
+                >
+                  {reloading ? "Reloading..." : "Reload metadata"}
+                </button>
+              )}
+              {loggedIn && (
+                <button
+                  type="button"
+                  className="scrutinizer__button"
                   onClick={() => void fetchAlbums()}
+                  disabled={reloading}
                 >
                   Refresh
                 </button>
@@ -212,6 +276,10 @@ const Scrutinizer = (): ReactElement => {
 
           {error && (
             <div className="scrutinizer__error">API Error: {error}</div>
+          )}
+
+          {notice && !error && (
+            <div className="scrutinizer__notice">{notice}</div>
           )}
 
           {loading ? (
@@ -255,6 +323,7 @@ const Scrutinizer = (): ReactElement => {
             <ul className="scrutinizerAlbumList">
               {albums.map((album, index) => {
                 const saving = savingIds.has(album.album_id);
+                const isNew = newAlbumIds.has(album.album_id);
                 const rowClass = album.enabled
                   ? "scrutinizerAlbumItem"
                   : "scrutinizerAlbumItem is-disabled";
@@ -271,7 +340,24 @@ const Scrutinizer = (): ReactElement => {
 
                       <div className="scrutinizerAlbumInfo">
                         <span className="scrutinizerAlbumTitle">
-                          {album.album_name}
+                          {album.scheduling_state === "playing" && (
+                            <span className="scrutinizerAlbumBadge scrutinizerAlbumBadge--playing">
+                              Now playing
+                            </span>
+                          )}
+                          {album.scheduling_state === "queued" && (
+                            <span className="scrutinizerAlbumBadge scrutinizerAlbumBadge--queued">
+                              Queued
+                            </span>
+                          )}
+                          {isNew && (
+                            <span className="scrutinizerAlbumBadge scrutinizerAlbumBadge--new">
+                              NEW
+                            </span>
+                          )}
+                          <span className="scrutinizerAlbumName">
+                            {album.album_name}
+                          </span>
                         </span>
                         <span className="scrutinizerAlbumMeta">
                           {album.album_artist}

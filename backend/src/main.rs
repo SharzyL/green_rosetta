@@ -64,6 +64,8 @@ pub(crate) struct AppState {
     scheduler: Arc<scheduler::Scheduler>,
     admin_rate_limiter: Arc<tokio::sync::Mutex<AdminRateLimiter>>,
     admin_sessions: Arc<tokio::sync::RwLock<auth::AdminSessions>>,
+    /// Serializes admin metadata reloads so two concurrent reloads can't run at once.
+    reload_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 #[derive(Debug)]
@@ -266,6 +268,27 @@ async fn manifest(
     Ok((headers, mpd))
 }
 
+/// Load the metadata database from the configured storage backend (local dir or S3 bucket).
+///
+/// Used both at startup and by the admin reload endpoint. Parse errors (e.g. malformed YAML)
+/// propagate as `Err`, so callers fail-fast and can keep serving the previous database.
+pub(crate) async fn load_database(config: &config::Config) -> Result<db::Database> {
+    if config.storage.backend == "s3" {
+        let s3_cfg = config.storage.s3.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("storage.backend is 's3' but storage.s3 is not configured")
+        })?;
+        db::s3_loader::load_database_from_s3(s3_cfg).await
+    } else {
+        let root = config
+            .storage
+            .base_path
+            .clone()
+            .unwrap_or_else(|| ".".to_string());
+        let metadata_dir = std::path::PathBuf::from(root).join("metadata");
+        db::Database::load(&metadata_dir)
+    }
+}
+
 fn apply_env_overrides(config: &mut config::Config) -> Result<()> {
     // Ensure `public_access_domain` is an absolute URL so it can be embedded in MPDs and redirects.
     fn normalize_public_access_domain(raw: &str) -> Result<String> {
@@ -446,20 +469,7 @@ async fn main() -> Result<()> {
     }
 
     // Load database (local dir or S3 bucket, depending on storage backend).
-    let db_loaded = if config.storage.backend == "s3" {
-        let s3_cfg = config.storage.s3.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("storage.backend is 's3' but storage.s3 is not configured")
-        })?;
-        db::s3_loader::load_database_from_s3(s3_cfg).await?
-    } else {
-        let root = config
-            .storage
-            .base_path
-            .clone()
-            .unwrap_or_else(|| ".".to_string());
-        let metadata_dir = std::path::PathBuf::from(root).join("metadata");
-        db::Database::load(&metadata_dir)?
-    };
+    let db_loaded = load_database(&config).await?;
 
     tracing::info!(
         "Loaded {} albums with {} total tracks",
@@ -508,6 +518,7 @@ async fn main() -> Result<()> {
             count: 0,
         })),
         admin_sessions: Arc::new(tokio::sync::RwLock::new(auth::AdminSessions::default())),
+        reload_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
 
     // Build router with CORS support
@@ -533,6 +544,7 @@ async fn main() -> Result<()> {
             "/albums/{album_id}/enabled",
             put(api::admin_set_album_enabled),
         )
+        .route("/reload", post(api::admin_reload))
         .route_layer(from_fn_with_state(admin_state, admin_auth_middleware));
 
     let admin_routes = admin_public

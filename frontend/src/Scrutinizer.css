@@ -52,6 +52,14 @@
   margin: 0 18px 12px;
 }
 
+.scrutinizer__notice {
+  border: 1px solid rgba(20, 90, 50, 0.35);
+  background: rgba(232, 255, 240, 0.9);
+  color: rgba(20, 90, 50, 0.95);
+  padding: 12px 14px;
+  margin: 0 18px 12px;
+}
+
 .scrutinizerLogin {
   padding: 0 18px 18px;
   display: flex;
@@ -106,6 +114,34 @@
   opacity: 0.55;
 }
 
+/* Inline badges shown before an album title (scheduling state, newly added, etc.). */
+.scrutinizerAlbumBadge {
+  flex-shrink: 0;
+  padding: 2px 5px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  border-radius: 3px;
+}
+
+/* Newly discovered by the most recent reload. */
+.scrutinizerAlbumBadge--new {
+  background: rgba(255, 0, 128, 1);
+}
+
+/* Currently on air in the continuous stream. */
+.scrutinizerAlbumBadge--playing {
+  background: rgba(20, 160, 90, 1);
+}
+
+/* Scheduled ahead in the playback queue. */
+.scrutinizerAlbumBadge--queued {
+  background: rgba(15, 23, 42, 0.55);
+}
+
 .scrutinizerAlbumMain {
   display: grid;
   grid-template-columns: 34px 1fr auto;
@@ -136,6 +172,14 @@
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scrutinizerAlbumName {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -146,6 +146,27 @@ pub(crate) async fn album(
     }))
 }
 
+/// Whether an album is currently on air or queued ahead in the continuous stream.
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum SchedulingState {
+    Playing,
+    Queued,
+}
+
+fn scheduling_state_for(
+    album_id: &str,
+    snap: &crate::scheduler::SchedulingSnapshot,
+) -> Option<SchedulingState> {
+    if snap.now_playing_album_id.as_deref() == Some(album_id) {
+        Some(SchedulingState::Playing)
+    } else if snap.queued_album_ids.contains(album_id) {
+        Some(SchedulingState::Queued)
+    } else {
+        None
+    }
+}
+
 #[derive(Serialize)]
 pub(crate) struct AdminAlbumSummaryResponse {
     pub album_id: String,
@@ -154,12 +175,16 @@ pub(crate) struct AdminAlbumSummaryResponse {
     pub enabled: bool,
     pub track_count: usize,
     pub cover_url: String,
+    /// Live scheduling state (now playing / queued). Absent when the album is neither.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduling_state: Option<SchedulingState>,
 }
 
 pub(crate) async fn admin_albums(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AdminAlbumSummaryResponse>>, (StatusCode, String)> {
     let media_base = media_base_url(&state)?;
+    let snap = state.scheduler.scheduling_snapshot().await;
     let db = state.db.read().await;
     let mut albums: Vec<AdminAlbumSummaryResponse> = db
         .albums
@@ -171,6 +196,7 @@ pub(crate) async fn admin_albums(
             enabled: a.enabled,
             track_count: a.tracks.len(),
             cover_url: join_url(&media_base, &a.cover_path),
+            scheduling_state: scheduling_state_for(&a.id, &snap),
         })
         .collect();
     albums.sort_by(|a, b| {
@@ -194,23 +220,89 @@ pub(crate) async fn admin_set_album_enabled(
     let media_base = media_base_url(&state)?;
     // We intentionally keep enabled state in-memory only for now.
     // This avoids write contention/corruption in the metadata directory.
-    let mut db = state.db.write().await;
-    let target = db
-        .albums
-        .iter_mut()
-        .find(|a| a.id == album_id)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, "Album not found".to_string()))?;
+    let (id, name, artist, enabled, track_count, cover_path) = {
+        let mut db = state.db.write().await;
+        let target = db
+            .albums
+            .iter_mut()
+            .find(|a| a.id == album_id)
+            .ok_or_else(|| (StatusCode::NOT_FOUND, "Album not found".to_string()))?;
 
-    target.enabled = req.enabled;
+        target.enabled = req.enabled;
+        (
+            target.id.clone(),
+            target.name.clone(),
+            target.artist.clone(),
+            target.enabled,
+            target.tracks.len(),
+            target.cover_path.clone(),
+        )
+    };
+
+    let snap = state.scheduler.scheduling_snapshot().await;
 
     Ok(Json(AdminAlbumSummaryResponse {
-        album_id: target.id.clone(),
-        album_name: target.name.clone(),
-        album_artist: target.artist.clone(),
-        enabled: target.enabled,
-        track_count: target.tracks.len(),
-        cover_url: join_url(&media_base, &target.cover_path),
+        scheduling_state: scheduling_state_for(&id, &snap),
+        album_id: id,
+        album_name: name,
+        album_artist: artist,
+        enabled,
+        track_count,
+        cover_url: join_url(&media_base, &cover_path),
     }))
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct ReloadSummary {
+    pub albums_before: usize,
+    pub albums_after: usize,
+    pub added: usize,
+    pub removed: usize,
+    pub kept_disabled: usize,
+}
+
+pub(crate) async fn admin_reload(
+    State(state): State<AppState>,
+) -> Result<Json<ReloadSummary>, (StatusCode, String)> {
+    // De-dupe concurrent reloads: each load re-reads the whole metadata set (and, in S3 mode,
+    // performs many network round-trips), so we only allow one at a time.
+    let _guard = state
+        .reload_lock
+        .try_lock()
+        .map_err(|_| (StatusCode::CONFLICT, "reload already in progress".to_string()))?;
+
+    // Build the new database OUTSIDE the db lock. On any error (e.g. malformed YAML) we return
+    // here and the currently-serving database is left untouched (atomic swap-or-nothing).
+    let mut new_db = crate::load_database(&state.config)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("reload failed: {e:#}")))?;
+
+    // Merge runtime-only enabled flags and swap atomically, holding the db lock only briefly.
+    let summary = {
+        let mut db = state.db.write().await;
+        new_db.inherit_enabled_from(&db);
+
+        let before: std::collections::HashSet<&str> =
+            db.albums.iter().map(|a| a.id.as_str()).collect();
+        let after: std::collections::HashSet<&str> =
+            new_db.albums.iter().map(|a| a.id.as_str()).collect();
+        let summary = ReloadSummary {
+            albums_before: db.albums.len(),
+            albums_after: new_db.albums.len(),
+            added: after.difference(&before).count(),
+            removed: before.difference(&after).count(),
+            kept_disabled: new_db.albums.iter().filter(|a| !a.enabled).count(),
+        };
+
+        // Swap the contents under the shared Arc so the scheduler (which holds the same Arc)
+        // sees the new data. We do NOT restart the scheduler: its mpd_start_time and queue stay
+        // intact, keeping existing listeners' timeline continuous.
+        *db = new_db;
+        summary
+    };
+
+    tracing::info!(?summary, "metadata reloaded");
+    Ok(Json(summary))
 }
 
 #[derive(Debug, Deserialize)]
