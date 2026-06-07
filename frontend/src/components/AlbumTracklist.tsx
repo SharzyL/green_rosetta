@@ -243,7 +243,7 @@ const AlbumTracklist = ({
           )}
           {!showCombinedDate && normalizedOriginalDate && (
             <div className="album-tracklist-meta-row">
-              <span className="album-tracklist-meta-key">ORIGINAL DATE</span>
+              <span className="album-tracklist-meta-key">ORIGDATE</span>
               <span className="album-tracklist-meta-value">
                 {normalizedOriginalDate}
               </span>

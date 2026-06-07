@@ -2,6 +2,7 @@
 /target
 result*
 .idea
+/data
 /test_dir
 /backend.config.toml
 /generator.config.toml
