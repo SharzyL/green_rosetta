@@ -266,7 +266,7 @@ async fn generate(
             let album_dir_name = format!("{} - {} - {}", album_id, artist_dir, album_name);
             let albums_root = output_media.join("albums");
             let final_album_dir = albums_root.join(&album_dir_name);
-            let staging_album_dir = albums_root.join(format!("{}.tmp", &album_dir_name));
+            let staging_album_dir = albums_root.join(format!("{}.tmp", album_dir_name));
 
             let result = run_album(
                 &album_info,
