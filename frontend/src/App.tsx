@@ -41,6 +41,9 @@ function App(): ReactElement {
     number | null
   >(null);
   const [debugMode, setDebugMode] = useState(false);
+  // A rejected play() often arrives after the listener has clicked again; a second
+  // concurrent play() would only abort the first one.
+  const resumeInFlightRef = useRef(false);
 
   useEffect(() => {
     const trackId = currentTrackId;
@@ -121,6 +124,9 @@ function App(): ReactElement {
   const handleRequestPlay = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
+    if (resumeInFlightRef.current) return;
+
+    resumeInFlightRef.current = true;
 
     // dash.js parked the playhead at the live edge it computed on load and left it
     // there while we waited for a gesture, so it is now stale by however long the
@@ -130,9 +136,24 @@ function App(): ReactElement {
 
     try {
       await video.play();
+
+      // Engines that predate the play() promise resolve immediately without starting;
+      // a still-paused element means the gesture did not take.
+      if (video.paused) {
+        throw new DOMException("Playback did not start", "NotAllowedError");
+      }
+
       setAutoplayBlocked(false);
     } catch (err) {
-      console.warn("Play failed:", err);
+      // `NotAllowedError` here means the gesture did not lift the block; `AbortError`
+      // means the start was interrupted. Either way keep the play button up so the
+      // listener can retry; `AbortError` can arrive after `play` already fired and
+      // cleared the flag, so re-assert it rather than assuming it held.
+      const name = err instanceof DOMException ? err.name : "unknown";
+      console.warn(`Play failed after user gesture (${name}):`, err);
+      setAutoplayBlocked(true);
+    } finally {
+      resumeInFlightRef.current = false;
     }
   }, []);
 
