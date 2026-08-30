@@ -105,7 +105,7 @@ function NowPlaying({
     // <img> onLoad event never fires. Reconcile immediately to avoid getting stuck
     // in the "loading" state.
     const img = imgRef.current;
-    if (img && img.complete) {
+    if (img?.complete) {
       setCoverStatus(img.naturalWidth > 0 ? "loaded" : "error");
     }
   }, [coverUrl]);

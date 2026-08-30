@@ -49,6 +49,7 @@ body {
   inset: 0;
   width: 100vw;
   height: 100vh;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: 100vh is the fallback for browsers without dvh support */
   height: 100dvh;
   z-index: -1;
   pointer-events: none;
