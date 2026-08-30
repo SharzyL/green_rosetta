@@ -20,7 +20,8 @@ interface PlayerProps {
   onAutoplayBlockedChange?: (blocked: boolean) => void;
   onTrackIdChange?: (trackId: string) => void;
   onPeriodStartSecondsChange?: (startSeconds: number) => void;
-  // Optional handle so debug tooling can poll dash.js internals; not used for playback.
+  // Optional handle so callers can reach dash.js internals (debug polling, seeking
+  // back to the live edge when recovering from blocked autoplay).
   playerInstanceRef?: RefObject<MediaPlayerClass | null>;
 }
 

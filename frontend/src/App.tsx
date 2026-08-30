@@ -122,6 +122,12 @@ function App(): ReactElement {
     const video = videoRef.current;
     if (!video) return;
 
+    // dash.js parked the playhead at the live edge it computed on load and left it
+    // there while we waited for a gesture, so it is now stale by however long the
+    // block lasted. Rejoin the live edge before resuming, otherwise playback starts
+    // behind where the station actually is.
+    playerInstanceRef.current?.seekToOriginalLive();
+
     try {
       await video.play();
       setAutoplayBlocked(false);
