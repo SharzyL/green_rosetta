@@ -2,6 +2,7 @@ import type { MediaPlayerClass } from "dashjs";
 import {
   type ReactElement,
   type RefObject,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -117,6 +118,18 @@ function App(): ReactElement {
     return () => controller.abort();
   }, [trackInfo?.album_id]);
 
+  const handleRequestPlay = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    try {
+      await video.play();
+      setAutoplayBlocked(false);
+    } catch (err) {
+      console.warn("Play failed:", err);
+    }
+  }, []);
+
   return (
     <div className="container">
       <div className="player-container">
@@ -138,7 +151,7 @@ function App(): ReactElement {
             videoRef={videoRef as RefObject<HTMLVideoElement>}
             periodStartSeconds={currentPeriodStartSeconds}
             autoplayBlocked={autoplayBlocked}
-            onAutoplayRecovered={() => setAutoplayBlocked(false)}
+            onRequestPlay={handleRequestPlay}
             onActivateDebug={() => setDebugMode((v) => !v)}
           />
 

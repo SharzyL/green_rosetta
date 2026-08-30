@@ -27,7 +27,7 @@ interface NowPlayingProps {
   videoRef: RefObject<HTMLVideoElement>;
   periodStartSeconds: number | null;
   autoplayBlocked: boolean;
-  onAutoplayRecovered: () => void;
+  onRequestPlay: () => void;
   onActivateDebug?: () => void;
 }
 
@@ -36,7 +36,7 @@ function NowPlaying({
   videoRef,
   periodStartSeconds,
   autoplayBlocked,
-  onAutoplayRecovered,
+  onRequestPlay,
   onActivateDebug,
 }: NowPlayingProps): ReactElement {
   const isLoading = !nowPlaying;
@@ -173,7 +173,7 @@ function NowPlaying({
           <VolumeControl
             videoRef={videoRef}
             autoplayBlocked={autoplayBlocked}
-            onAutoplayRecovered={onAutoplayRecovered}
+            onRequestPlay={onRequestPlay}
           />
         </div>
       </div>

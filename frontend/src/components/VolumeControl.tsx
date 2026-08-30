@@ -21,13 +21,13 @@ import { PlayIcon, VolumeOffIcon, VolumeOnIcon } from "./icons";
 interface VolumeControlProps {
   videoRef: RefObject<HTMLVideoElement>;
   autoplayBlocked: boolean;
-  onAutoplayRecovered: () => void;
+  onRequestPlay: () => void;
 }
 
 const VolumeControl = ({
   videoRef,
   autoplayBlocked,
-  onAutoplayRecovered,
+  onRequestPlay,
 }: VolumeControlProps): ReactElement => {
   const [volume, setVolume] = useState<number>(() => loadVolume(0.8));
   const [muted, setMuted] = useState<boolean>(() => loadMuted());
@@ -73,17 +73,6 @@ const VolumeControl = ({
     // If unmuting from a 0 volume state, restore last audible volume.
     if (!nextMuted && volume === 0) {
       handleVolumeChange(lastNonZeroVolumeRef.current);
-    }
-  };
-
-  const handleClickToPlay = async () => {
-    const video = videoRef.current;
-    if (!video) return;
-    try {
-      await video.play();
-      onAutoplayRecovered();
-    } catch (err) {
-      console.warn("Play failed:", err);
     }
   };
 
@@ -198,7 +187,7 @@ const VolumeControl = ({
       <button
         type="button"
         className={muteButtonClassName}
-        onClick={autoplayBlocked ? handleClickToPlay : handleToggleMute}
+        onClick={autoplayBlocked ? onRequestPlay : handleToggleMute}
         aria-label={
           autoplayBlocked ? "Click to play" : isSilent ? "Unmute" : "Mute"
         }
