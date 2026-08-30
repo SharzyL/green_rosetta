@@ -47,6 +47,10 @@ function NowPlaying({
   >("idle");
   const imgRef = useRef<HTMLImageElement>(null);
   const debugClicksRef = useRef<number[]>([]);
+  // Anchor used to extrapolate the playhead while it is frozen; see the progress effect.
+  const frozenAnchorRef = useRef<{ mediaTime: number; atMs: number } | null>(
+    null,
+  );
 
   // Reveal the hidden debug panel after five clicks on the cover within 2s
   // (the classic "tap the version number" gesture).
@@ -71,6 +75,10 @@ function NowPlaying({
     setCurrentElapsed(0);
   }, [nowPlaying]);
 
+  useEffect(() => {
+    if (!autoplayBlocked) frozenAnchorRef.current = null;
+  }, [autoplayBlocked]);
+
   // Drive progress from the media element's playhead.
   useEffect(() => {
     if (!nowPlaying) return;
@@ -80,7 +88,25 @@ function NowPlaying({
       const video = videoRef.current;
       if (!video) return;
 
-      const inTrackSeconds = video.currentTime - periodStartSeconds;
+      let mediaTime = video.currentTime;
+
+      if (autoplayBlocked) {
+        // The playhead is frozen while we wait for a gesture, but the station keeps
+        // broadcasting. Anchor to wherever dash.js parked the playhead and advance it
+        // off the wall clock so the bar still reflects what is on air. Re-anchoring
+        // whenever `currentTime` moves absorbs dash.js's initial seek to the live edge.
+        const now = performance.now();
+        const anchor = frozenAnchorRef.current;
+        const nextAnchor =
+          !anchor || anchor.mediaTime !== mediaTime
+            ? { mediaTime, atMs: now }
+            : anchor;
+
+        frozenAnchorRef.current = nextAnchor;
+        mediaTime = nextAnchor.mediaTime + (now - nextAnchor.atMs) / 1000;
+      }
+
+      const inTrackSeconds = mediaTime - periodStartSeconds;
       if (!Number.isFinite(inTrackSeconds)) return;
 
       const clamped = Math.min(
@@ -91,7 +117,7 @@ function NowPlaying({
     }, 200);
 
     return () => clearInterval(interval);
-  }, [nowPlaying, periodStartSeconds, videoRef]);
+  }, [nowPlaying, periodStartSeconds, videoRef, autoplayBlocked]);
 
   const coverUrl = nowPlaying?.cover_url ?? "";
   useEffect(() => {
@@ -115,8 +141,7 @@ function NowPlaying({
     return (currentElapsed / nowPlaying.duration_seconds) * 100;
   }, [currentElapsed, nowPlaying]);
 
-  const isAutoplayBlocked = autoplayBlocked;
-  const progressPct = isAutoplayBlocked || isLoading ? 0 : progress;
+  const progressPct = isLoading ? 0 : progress;
   const showCoverPlaceholder = isLoading || coverStatus !== "loaded";
   const showCoverSpinner = isLoading || coverStatus === "loading";
   const showTextSkeleton = isLoading;
