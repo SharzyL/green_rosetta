@@ -17,7 +17,9 @@
 .cover-art__img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* Never crop the artwork; non-square covers letterbox against the white card
+     while the frame keeps its square height so the layout doesn't shift. */
+  object-fit: contain;
 }
 
 .cover-art__img.is-loading {
