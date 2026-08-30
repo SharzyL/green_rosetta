@@ -40,6 +40,9 @@ const VolumeControl = ({
   // When muted, present the slider at 0 while keeping the real volume value persisted.
   const sliderValuePct = muted ? 0 : volumePct;
 
+  // Silence has two representations: the `muted` flag, and a volume dragged to zero.
+  const isSilent = muted || volume === 0;
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -65,19 +68,8 @@ const VolumeControl = ({
     }
   };
 
-  const handleToggleMute = () => {
-    const nextMuted = !muted;
-    setMuted(nextMuted);
-    saveMuted(nextMuted);
-
-    // If unmuting from a 0 volume state, restore last audible volume.
-    if (!nextMuted && volume === 0) {
-      handleVolumeChange(lastNonZeroVolumeRef.current);
-    }
-  };
-
-  // A saved mute (or a saved volume of 0) would otherwise start silent playback that
-  // needs a second click to undo, so pressing play restores audio as well.
+  // Leave either silent state: clear `muted`, and restore the remembered level if the
+  // volume itself was dragged to zero (which overwrote the level).
   const ensureAudible = () => {
     const video = videoRef.current;
     const nextVolume = volume > 0 ? volume : lastNonZeroVolumeRef.current;
@@ -91,20 +83,33 @@ const VolumeControl = ({
       saveMuted(false);
     }
 
-    // The volume/muted effects only run once this click's render commits, but
-    // onRequestPlay calls play() synchronously, so apply to the element directly.
+    // Callers may start playback within the same click, before the volume/muted
+    // effects run, so apply to the element directly instead of awaiting the commit.
     if (video) {
       video.volume = nextVolume;
       video.muted = false;
     }
   };
 
+  const handleToggleMute = () => {
+    // Toggle audibility rather than the `muted` flag: at volume 0 the button already
+    // reads "Unmute", so flipping `muted` would silence an already silent player and
+    // cost a second click to undo.
+    if (isSilent) {
+      ensureAudible();
+      return;
+    }
+
+    setMuted(true);
+    saveMuted(true);
+  };
+
   const handleBlockedPlayClick = () => {
+    // A saved mute would otherwise start playback silently and need a second click.
     ensureAudible();
     onRequestPlay();
   };
 
-  const isSilent = muted || volume === 0;
   const showSilentStyle = autoplayBlocked || isSilent;
   const muteButtonClassName = [
     "volume__mute",
