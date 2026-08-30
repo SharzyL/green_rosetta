@@ -76,6 +76,34 @@ const VolumeControl = ({
     }
   };
 
+  // A saved mute (or a saved volume of 0) would otherwise start silent playback that
+  // needs a second click to undo, so pressing play restores audio as well.
+  const ensureAudible = () => {
+    const video = videoRef.current;
+    const nextVolume = volume > 0 ? volume : lastNonZeroVolumeRef.current;
+
+    if (nextVolume !== volume) {
+      setVolume(nextVolume);
+      saveVolume(nextVolume);
+    }
+    if (muted) {
+      setMuted(false);
+      saveMuted(false);
+    }
+
+    // The volume/muted effects only run once this click's render commits, but
+    // onRequestPlay calls play() synchronously, so apply to the element directly.
+    if (video) {
+      video.volume = nextVolume;
+      video.muted = false;
+    }
+  };
+
+  const handleBlockedPlayClick = () => {
+    ensureAudible();
+    onRequestPlay();
+  };
+
   const isSilent = muted || volume === 0;
   const showSilentStyle = autoplayBlocked || isSilent;
   const muteButtonClassName = [
@@ -187,7 +215,7 @@ const VolumeControl = ({
       <button
         type="button"
         className={muteButtonClassName}
-        onClick={autoplayBlocked ? onRequestPlay : handleToggleMute}
+        onClick={autoplayBlocked ? handleBlockedPlayClick : handleToggleMute}
         aria-label={
           autoplayBlocked ? "Click to play" : isSilent ? "Unmute" : "Mute"
         }
