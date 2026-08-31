@@ -28,9 +28,20 @@ use tower_http::services::ServeDir;
 
 /// How often the schedule advances on its own, independently of traffic.
 ///
-/// Must stay comfortably below `min_future_manifest_duration + time_shift_buffer_depth`, the span
-/// after which an unmaintained queue has aged out of the manifest window entirely.
-const SCHEDULER_TICK: Duration = Duration::from_secs(30);
+/// Derived from the window the scheduler maintains, so the relationship holds for any config
+/// rather than only the shipped one: an unmaintained queue ages out after roughly
+/// `min_future_manifest_duration + time_shift_buffer_depth`, and this keeps several ticks inside
+/// that span. A 20s window ticking every 30s would age out between ticks.
+fn scheduler_tick_period(streaming: &config::StreamingConfig) -> Duration {
+    const TICKS_PER_WINDOW: f64 = 4.0;
+    const MIN_SECONDS: f64 = 5.0;
+    const MAX_SECONDS: f64 = 30.0;
+
+    let window = streaming.min_future_manifest_duration.max(0.0)
+        + streaming.time_shift_buffer_depth.max(0.0);
+
+    Duration::from_secs_f64((window / TICKS_PER_WINDOW).clamp(MIN_SECONDS, MAX_SECONDS))
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "Green Rosetta Backend")]
@@ -531,8 +542,13 @@ async fn main() -> Result<()> {
     // room: on a quiet site the schedule would otherwise sit still until the next visitor, and a
     // long enough gap ages the whole queue out of the window.
     let tick_state = state.clone();
+    let tick_period = scheduler_tick_period(&tick_state.config.streaming);
+    tracing::info!(
+        tick_seconds = tick_period.as_secs_f64(),
+        "Advancing the schedule on a timer"
+    );
     tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(SCHEDULER_TICK);
+        let mut ticker = tokio::time::interval(tick_period);
         // A stalled runtime should resume ticking, not fire a burst to catch up.
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
