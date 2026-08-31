@@ -19,12 +19,18 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tower::limit::ConcurrencyLimitLayer;
 use tower::service_fn;
 use tower_http::cors::CorsLayer;
 use tower_http::cors::{AllowOrigin, Any};
 use tower_http::services::ServeDir;
+
+/// How often the schedule advances on its own, independently of traffic.
+///
+/// Must stay comfortably below `min_future_manifest_duration + time_shift_buffer_depth`, the span
+/// after which an unmaintained queue has aged out of the manifest window entirely.
+const SCHEDULER_TICK: Duration = Duration::from_secs(30);
 
 #[derive(Parser, Debug)]
 #[command(name = "Green Rosetta Backend")]
@@ -520,6 +526,29 @@ async fn main() -> Result<()> {
         admin_sessions: Arc::new(tokio::sync::RwLock::new(auth::AdminSessions::default())),
         reload_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
+
+    // Requests are what normally drive `maintain`, but a radio should keep playing to an empty
+    // room: on a quiet site the schedule would otherwise sit still until the next visitor, and a
+    // long enough gap ages the whole queue out of the window.
+    let tick_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(SCHEDULER_TICK);
+        // A stalled runtime should resume ticking, not fire a burst to catch up.
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            if let Err(e) = tick_state
+                .scheduler
+                .maintain(
+                    tick_state.config.streaming.time_shift_buffer_depth,
+                    tick_state.config.streaming.min_future_manifest_duration,
+                )
+                .await
+            {
+                tracing::error!("Scheduler tick failed: {e}");
+            }
+        }
+    });
 
     // Build router with CORS support
     let middleware_state = state.clone();
