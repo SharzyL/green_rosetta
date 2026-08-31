@@ -316,14 +316,33 @@ impl Scheduler {
     ///
     /// Resumes from `last_scheduled` so an interruption skips the dead span instead of rewinding
     /// to the top of the album list. Only a genuine cold start has no cursor to follow.
+    ///
+    /// Reaching here is abnormal: the periodic tick maintains the window regardless of traffic,
+    /// so a drained queue means maintenance stopped for longer than the window (a stalled
+    /// runtime, a suspended host, repeated `maintain` failures) or pruning removed every entry.
+    /// We recover rather than fail the manifest, but say so loudly.
     async fn resume_at(&self, start_seconds: f64) -> anyhow::Result<()> {
         let cursor = self.last_scheduled.read().await.clone();
         let (album_id, track_id) = match cursor {
             Some(last) => {
+                // Negative means the queue was emptied by pruning while the cursor still pointed
+                // ahead of now; positive is dead air nobody could have been served.
+                let gap_seconds = start_seconds - last.end_seconds();
+                tracing::warn!(
+                    gap_seconds,
+                    after_album_id = %last.album_id,
+                    after_track_id = %last.track_id,
+                    "schedule queue ran dry; rejoining the playlist at the live edge"
+                );
                 self.next_track_in_playlist(&last.album_id, &last.track_id)
                     .await?
             }
-            None => self.random_start().await?,
+            None => {
+                tracing::warn!(
+                    "schedule queue ran dry with no playlist cursor; starting from a random album"
+                );
+                self.random_start().await?
+            }
         };
 
         let (_album, track) = self.get_album_track(&album_id, &track_id).await?;
