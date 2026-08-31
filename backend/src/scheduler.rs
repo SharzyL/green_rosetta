@@ -43,6 +43,25 @@ pub struct SchedulingSnapshot {
     pub queued_album_ids: HashSet<String>,
 }
 
+/// Pick a random enabled album and its first track.
+///
+/// Takes an already-locked database so callers holding the guard do not re-acquire it, and hands
+/// back references so they can read whatever else they need (name, title, duration) off them.
+fn pick_random_start(db: &Database) -> anyhow::Result<(&Album, &Track)> {
+    let enabled = db.get_enabled_albums();
+    let album = {
+        let mut rng = rand::thread_rng();
+        *enabled
+            .choose(&mut rng)
+            .ok_or_else(|| anyhow::anyhow!("No enabled albums"))?
+    };
+    let track = album
+        .tracks
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("Enabled album has no tracks"))?;
+    Ok((album, track))
+}
+
 impl Scheduler {
     pub async fn new(
         db: Arc<tokio::sync::RwLock<Database>>,
@@ -51,39 +70,21 @@ impl Scheduler {
         let (
             first_album_id,
             first_album_name,
-            _first_album_artist,
             first_track_id,
             first_track_artist,
             first_track_title,
             first_track_duration,
         ) = {
             let db_read = db.read().await;
-            let enabled_albums = db_read.get_enabled_albums();
-            if enabled_albums.is_empty() {
-                return Err(anyhow::anyhow!("No enabled albums in database"));
-            }
-
-            // Randomly select starting album, then start at its first track.
-            let mut rng = rand::thread_rng();
-            let first_album = enabled_albums
-                .choose(&mut rng)
-                .ok_or_else(|| anyhow::anyhow!("Failed to select random album"))?;
-            let first_track = first_album
-                .tracks
-                .first()
-                .ok_or_else(|| anyhow::anyhow!("Album has no tracks"))?;
+            let (album, track) = pick_random_start(&db_read)?;
 
             (
-                first_album.id.clone(),
-                first_album.name.clone(),
-                first_album.artist.clone(),
-                first_track.id.clone(),
-                first_track
-                    .artist
-                    .clone()
-                    .unwrap_or_else(|| first_album.artist.clone()),
-                first_track.title.clone(),
-                first_track.encoded_duration_seconds(),
+                album.id.clone(),
+                album.name.clone(),
+                track.id.clone(),
+                track.artist.clone().unwrap_or_else(|| album.artist.clone()),
+                track.title.clone(),
+                track.encoded_duration_seconds(),
             )
         };
 
@@ -301,17 +302,7 @@ impl Scheduler {
     /// Pick a random enabled album's first track, the way `new` chooses a cold start.
     async fn random_start(&self) -> anyhow::Result<(String, String)> {
         let db = self.db.read().await;
-        let enabled = db.get_enabled_albums();
-        let album = {
-            let mut rng = rand::thread_rng();
-            *enabled
-                .choose(&mut rng)
-                .ok_or_else(|| anyhow::anyhow!("No enabled albums"))?
-        };
-        let track = album
-            .tracks
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("Enabled album has no tracks"))?;
+        let (album, track) = pick_random_start(&db)?;
         Ok((album.id.clone(), track.id.clone()))
     }
 
