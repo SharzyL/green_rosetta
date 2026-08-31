@@ -27,6 +27,8 @@ pub struct Scheduler {
     /// `queue` is trimmed to the manifest window, so once a quiet spell ages every entry out it
     /// can no longer answer "where has the catalogue reached". This cursor can.
     last_scheduled: Arc<tokio::sync::RwLock<Option<ScheduledTrack>>>,
+    /// Serialises `maintain` passes against each other.
+    maintain_lock: Arc<tokio::sync::Mutex<()>>,
     db: Arc<tokio::sync::RwLock<Database>>,
 }
 
@@ -109,6 +111,7 @@ impl Scheduler {
             mpd_start_time,
             queue: Arc::new(tokio::sync::RwLock::new(queue)),
             last_scheduled: Arc::new(tokio::sync::RwLock::new(Some(first))),
+            maintain_lock: Arc::new(tokio::sync::Mutex::new(())),
             db,
         })
     }
@@ -366,6 +369,13 @@ impl Scheduler {
         time_shift_buffer_depth: f64,
         min_future_manifest_duration: f64,
     ) -> anyhow::Result<()> {
+        // `append_next` reads the queue tail, awaits the database, then pushes. Two passes
+        // running that concurrently -- a request and the periodic tick, on a multi-threaded
+        // runtime -- would extend from the same tail and emit duplicate periods at one start
+        // time. Serialising the whole pass also keeps `last_scheduled` in step with the tail,
+        // since every push happens under this guard.
+        let _guard = self.maintain_lock.lock().await;
+
         let t_now = self.t_now_seconds();
         let window_start = (t_now - time_shift_buffer_depth).max(0.0);
         let window_end = t_now + min_future_manifest_duration.max(0.0);
