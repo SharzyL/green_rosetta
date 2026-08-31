@@ -515,10 +515,15 @@ mod tests {
     /// Regression: a quiet spell with no requests lets the whole window age out of the queue.
     /// Rejoining must continue the playlist from where it left off, not restart at the first
     /// album -- that made a low-traffic station replay album zero on every visit.
+    ///
+    /// One album, deliberately: `Scheduler::new` picks its start at random, and across several
+    /// short albums the window can reach the end of the list, where continuing legitimately
+    /// wraps to the first track -- indistinguishable from the restart this test exists to catch.
+    /// A single album longer than the window keeps that ambiguity out.
     #[tokio::test]
     async fn idle_gap_resumes_playlist_instead_of_restarting() {
         let db = Arc::new(tokio::sync::RwLock::new(Database {
-            albums: vec![test_album("A", 3), test_album("B", 3), test_album("C", 3)],
+            albums: vec![test_album("A", 10)],
         }));
         let mut scheduler = Scheduler::new(db.clone(), 0.0).await.unwrap();
 
