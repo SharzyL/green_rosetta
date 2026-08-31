@@ -209,14 +209,12 @@ impl Scheduler {
             return Err(anyhow::anyhow!("No enabled albums"));
         }
 
-        // If the current album is gone or disabled, just pick the first enabled album.
+        // The current album is gone or disabled, so there is no list position left to continue
+        // from. Pick at random rather than always `enabled[0]`, which would make every deletion
+        // resume at the same album.
         if current_album.is_none_or(|a| !a.enabled) {
-            let first_album = enabled[0];
-            let first_track = first_album
-                .tracks
-                .first()
-                .ok_or_else(|| anyhow::anyhow!("Enabled album has no tracks"))?;
-            return Ok((first_album.id.clone(), first_track.id.clone()));
+            let (album, track) = pick_random_start(&db)?;
+            return Ok((album.id.clone(), track.id.clone()));
         }
 
         let mut found = false;
@@ -308,8 +306,10 @@ impl Scheduler {
 
     /// Re-enter the playlist at `start_seconds` after the queue ran dry.
     ///
-    /// Resumes from `last_scheduled` so an interruption skips the dead span instead of rewinding
-    /// to the top of the album list. Only a genuine cold start has no cursor to follow.
+    /// Resumes from `last_scheduled` so an idle gap skips the dead span instead of rewinding to
+    /// the top of the album list. Two cases have no position to continue from and restart at a
+    /// random album instead: a cold start with no cursor, and a cursor whose album was just
+    /// deleted (`next_track_in_playlist` cannot place a track that is no longer in the list).
     ///
     /// Reaching here is abnormal: the periodic tick maintains the window regardless of traffic,
     /// so a drained queue means maintenance stopped for longer than the window (a stalled
