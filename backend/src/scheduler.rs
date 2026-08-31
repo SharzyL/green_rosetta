@@ -22,6 +22,11 @@ impl ScheduledTrack {
 pub struct Scheduler {
     mpd_start_time: DateTime<Utc>,
     queue: Arc<tokio::sync::RwLock<VecDeque<ScheduledTrack>>>,
+    /// The last track ever appended, retained after it leaves `queue`.
+    ///
+    /// `queue` is trimmed to the manifest window, so once a quiet spell ages every entry out it
+    /// can no longer answer "where has the catalogue reached". This cursor can.
+    last_scheduled: Arc<tokio::sync::RwLock<Option<ScheduledTrack>>>,
     db: Arc<tokio::sync::RwLock<Database>>,
 }
 
@@ -91,23 +96,42 @@ impl Scheduler {
         // have immediately available media on server startup.
         let offset_ms = (suggested_presentation_delay_seconds.max(0.0) * 1000.0) as i64;
         let mpd_start_time = Utc::now() - chrono::Duration::milliseconds(offset_ms);
-        let mut queue = VecDeque::new();
-        queue.push_back(ScheduledTrack {
+        let first = ScheduledTrack {
             album_id: first_album_id,
             track_id: first_track_id,
             start_seconds: 0.0,
             duration_seconds: first_track_duration,
-        });
+        };
+        let mut queue = VecDeque::new();
+        queue.push_back(first.clone());
 
         Ok(Scheduler {
             mpd_start_time,
             queue: Arc::new(tokio::sync::RwLock::new(queue)),
+            last_scheduled: Arc::new(tokio::sync::RwLock::new(Some(first))),
             db,
         })
     }
 
     pub fn mpd_start_time(&self) -> DateTime<Utc> {
         self.mpd_start_time
+    }
+
+    /// Test-only: move `mpd_start_time` back so `t_now_seconds()` jumps forward, simulating a
+    /// stretch of wall-clock time passing without sleeping through it.
+    #[cfg(test)]
+    fn advance_clock(&mut self, seconds: i64) {
+        self.mpd_start_time -= chrono::Duration::seconds(seconds);
+    }
+
+    /// Test-only: the playlist cursor, as (album_id, track_id).
+    #[cfg(test)]
+    async fn last_scheduled_ids(&self) -> Option<(String, String)> {
+        self.last_scheduled
+            .read()
+            .await
+            .as_ref()
+            .map(|st| (st.album_id.clone(), st.track_id.clone()))
     }
 
     pub fn t_now_seconds(&self) -> f64 {
@@ -231,8 +255,15 @@ impl Scheduler {
             duration_seconds: duration,
         };
 
-        self.queue.write().await.push_back(next);
+        self.push_scheduled(next).await;
         Ok(())
+    }
+
+    /// Append to the window and advance the playlist cursor together, so the cursor outlives the
+    /// window entry it came from.
+    async fn push_scheduled(&self, scheduled: ScheduledTrack) {
+        *self.last_scheduled.write().await = Some(scheduled.clone());
+        self.queue.write().await.push_back(scheduled);
     }
 
     /// Drop queued tracks whose album/track no longer exists (e.g. a reload deleted the album).
@@ -264,28 +295,45 @@ impl Scheduler {
         }
     }
 
-    /// Seed an empty queue with the first enabled album's first track at the given start offset.
-    /// Used to recover the timeline when pruning emptied the queue.
-    async fn seed_at(&self, start_seconds: f64) -> anyhow::Result<()> {
-        let (album_id, track_id) = {
-            let db = self.db.read().await;
-            let enabled = db.get_enabled_albums();
-            let album = enabled
-                .first()
-                .ok_or_else(|| anyhow::anyhow!("No enabled albums"))?;
-            let track = album
-                .tracks
-                .first()
-                .ok_or_else(|| anyhow::anyhow!("Enabled album has no tracks"))?;
-            (album.id.clone(), track.id.clone())
+    /// Pick a random enabled album's first track, the way `new` chooses a cold start.
+    async fn random_start(&self) -> anyhow::Result<(String, String)> {
+        let db = self.db.read().await;
+        let enabled = db.get_enabled_albums();
+        let album = {
+            let mut rng = rand::thread_rng();
+            *enabled
+                .choose(&mut rng)
+                .ok_or_else(|| anyhow::anyhow!("No enabled albums"))?
         };
+        let track = album
+            .tracks
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("Enabled album has no tracks"))?;
+        Ok((album.id.clone(), track.id.clone()))
+    }
+
+    /// Re-enter the playlist at `start_seconds` after the queue ran dry.
+    ///
+    /// Resumes from `last_scheduled` so an interruption skips the dead span instead of rewinding
+    /// to the top of the album list. Only a genuine cold start has no cursor to follow.
+    async fn resume_at(&self, start_seconds: f64) -> anyhow::Result<()> {
+        let cursor = self.last_scheduled.read().await.clone();
+        let (album_id, track_id) = match cursor {
+            Some(last) => {
+                self.next_track_in_playlist(&last.album_id, &last.track_id)
+                    .await?
+            }
+            None => self.random_start().await?,
+        };
+
         let (_album, track) = self.get_album_track(&album_id, &track_id).await?;
-        self.queue.write().await.push_back(ScheduledTrack {
+        self.push_scheduled(ScheduledTrack {
             album_id,
             track_id,
             start_seconds,
             duration_seconds: track.encoded_duration_seconds(),
-        });
+        })
+        .await;
         Ok(())
     }
 
@@ -321,10 +369,11 @@ impl Scheduler {
             self.queue.write().await.pop_front();
         }
 
-        // If pruning/dropping emptied the queue (e.g. the only queued album was deleted), seed a
-        // fresh track at the live edge so the stream recovers instead of going silent.
+        // If pruning/dropping emptied the queue (e.g. the only queued album was deleted, or the
+        // process was stalled long enough for the whole window to age out), rejoin the playlist
+        // at the live edge so the stream recovers instead of going silent.
         if self.queue.read().await.is_empty() {
-            self.seed_at(t_now).await?;
+            self.resume_at(t_now).await?;
         }
 
         // Ensure the schedule reaches far enough into the future. Appending from the (now valid)
@@ -442,6 +491,41 @@ mod tests {
                 .map(|i| test_track(&format!("{id}_t{i}")))
                 .collect(),
         }
+    }
+
+    /// Regression: a quiet spell with no requests lets the whole window age out of the queue.
+    /// Rejoining must continue the playlist from where it left off, not restart at the first
+    /// album -- that made a low-traffic station replay album zero on every visit.
+    #[tokio::test]
+    async fn idle_gap_resumes_playlist_instead_of_restarting() {
+        let db = Arc::new(tokio::sync::RwLock::new(Database {
+            albums: vec![test_album("A", 3), test_album("B", 3), test_album("C", 3)],
+        }));
+        let mut scheduler = Scheduler::new(db.clone(), 0.0).await.unwrap();
+
+        let (tsbd, min_future) = (60.0, 60.0);
+        scheduler.maintain(tsbd, min_future).await.unwrap();
+
+        // Where the catalogue had reached, and which track should follow it.
+        let (last_album, last_track) = scheduler.last_scheduled_ids().await.unwrap();
+        let (_, expected_track) = scheduler
+            .next_track_in_playlist(&last_album, &last_track)
+            .await
+            .unwrap();
+
+        // Nobody visits for an hour: every queued track now ends far behind the window.
+        scheduler.advance_clock(3600);
+
+        let periods = scheduler.get_mpd_periods(tsbd, min_future).await.unwrap();
+        assert!(!periods.is_empty(), "manifest went empty after an idle gap");
+        assert_eq!(
+            periods[0].0.id, expected_track,
+            "expected the playlist to continue after the gap"
+        );
+        assert_ne!(
+            periods[0].0.id, "A_t0",
+            "restarted at the first album's first track"
+        );
     }
 
     /// Regression: deleting the album that's currently on air (so the whole manifest window is
