@@ -21,6 +21,8 @@ export const API_ENDPOINTS = {
     `${API_BASE_URL}/api/admin/albums/${encodeURIComponent(albumId)}/enabled`,
   admin_reload: () => `${API_BASE_URL}/api/admin/reload`,
   manifest: () => `${API_BASE_URL}/stream/manifest.mpd`,
+  now: (presentationSeconds: number) =>
+    `${API_BASE_URL}/api/now?t=${encodeURIComponent(presentationSeconds.toFixed(3))}`,
 };
 
 export default {

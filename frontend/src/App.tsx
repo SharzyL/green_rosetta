@@ -15,6 +15,22 @@ import DebugPanel from "./components/DebugPanel";
 import NowPlaying from "./components/NowPlaying";
 import Player from "./components/Player";
 import { API_ENDPOINTS } from "./config";
+import { playheadFor } from "./lib/playhead";
+
+/** How often to ask the station what is on air. */
+const NOW_POLL_MS = 2000;
+
+interface PeriodInfo {
+  trackId: string;
+  startSeconds: number;
+}
+
+interface NowResponse {
+  track_id: string;
+  album_id: string;
+  period_start_seconds: number;
+  duration_seconds: number;
+}
 
 export interface TrackInfoData {
   album_id: string;
@@ -36,17 +52,57 @@ function App(): ReactElement {
   const playerInstanceRef = useRef<MediaPlayerClass | null>(null);
   const [currentAlbum, setCurrentAlbum] = useState<AlbumResponse | null>(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
-  const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
-  const [currentPeriodStartSeconds, setCurrentPeriodStartSeconds] = useState<
-    number | null
-  >(null);
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodInfo | null>(null);
   const [debugMode, setDebugMode] = useState(false);
   // A rejected play() often arrives after the listener has clicked again; a second
   // concurrent play() would only abort the first one.
   const resumeInFlightRef = useRef(false);
 
+  // What is on air is a question about a moment on the timeline, and only the station can
+  // answer it. The client cannot: a browser that refuses autoplay leaves dash.js with no moving
+  // playhead, no period events and a manifest it fetched exactly once. Asking about our own
+  // playhead works the same either way -- while playing it is what we are hearing, and while
+  // stopped it is where the station has got to since.
   useEffect(() => {
-    const trackId = currentTrackId;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const playhead = playheadFor(video);
+    const controller = new AbortController();
+
+    const poll = async () => {
+      try {
+        const response = await fetch(API_ENDPOINTS.now(playhead()), {
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+
+        const data = (await response.json()) as NowResponse;
+        setCurrentPeriod((previous) =>
+          previous?.trackId === data.track_id &&
+          previous?.startSeconds === data.period_start_seconds
+            ? previous
+            : {
+                trackId: data.track_id,
+                startSeconds: data.period_start_seconds,
+              },
+        );
+      } catch {
+        // Transient (offline, aborted, nothing scheduled yet); the next tick retries.
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => void poll(), NOW_POLL_MS);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const trackId = currentPeriod?.trackId;
     if (!trackId) {
       setTrackInfo(null);
       return;
@@ -83,7 +139,7 @@ function App(): ReactElement {
     void fetchTrackInfo();
 
     return () => controller.abort();
-  }, [currentTrackId]);
+  }, [currentPeriod?.trackId]);
 
   useEffect(() => {
     const albumId = trackInfo?.album_id;
@@ -168,15 +224,13 @@ function App(): ReactElement {
             videoRef={videoRef}
             manifestUrl={API_ENDPOINTS.manifest()}
             onAutoplayBlockedChange={setAutoplayBlocked}
-            onTrackIdChange={setCurrentTrackId}
-            onPeriodStartSecondsChange={setCurrentPeriodStartSeconds}
             playerInstanceRef={playerInstanceRef}
           />
 
           <NowPlaying
             nowPlaying={trackInfo}
             videoRef={videoRef as RefObject<HTMLVideoElement>}
-            periodStartSeconds={currentPeriodStartSeconds}
+            periodStartSeconds={currentPeriod?.startSeconds ?? null}
             autoplayBlocked={autoplayBlocked}
             onRequestPlay={handleRequestPlay}
             onActivateDebug={() => setDebugMode((v) => !v)}
@@ -184,7 +238,7 @@ function App(): ReactElement {
 
           <AlbumTracklist
             album={currentAlbum}
-            currentTrackId={currentTrackId}
+            currentTrackId={currentPeriod?.trackId ?? null}
           />
         </div>
       </div>
@@ -194,9 +248,9 @@ function App(): ReactElement {
           videoRef={videoRef}
           playerInstanceRef={playerInstanceRef}
           nowPlaying={trackInfo}
-          periodStartSeconds={currentPeriodStartSeconds}
+          periodStartSeconds={currentPeriod?.startSeconds ?? null}
           autoplayBlocked={autoplayBlocked}
-          currentTrackId={currentTrackId}
+          currentTrackId={currentPeriod?.trackId ?? null}
           onClose={() => setDebugMode(false)}
         />
       )}

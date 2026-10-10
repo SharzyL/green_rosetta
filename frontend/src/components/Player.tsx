@@ -8,9 +8,7 @@ import "./Player.css";
 import {
   MediaPlayer,
   type MediaPlayerClass,
-  type PeriodSwitchEvent,
   type PlaybackErrorEvent,
-  type StreamInfo,
 } from "dashjs";
 import { loadMuted, loadVolume } from "../lib/volume";
 
@@ -18,8 +16,6 @@ interface PlayerProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   manifestUrl: string;
   onAutoplayBlockedChange?: (blocked: boolean) => void;
-  onTrackIdChange?: (trackId: string) => void;
-  onPeriodStartSecondsChange?: (startSeconds: number) => void;
   // Optional handle so callers can reach dash.js internals (debug polling, seeking
   // back to the live edge when recovering from blocked autoplay).
   playerInstanceRef?: RefObject<MediaPlayerClass | null>;
@@ -30,29 +26,16 @@ const Player = React.memo(
     videoRef,
     manifestUrl,
     onAutoplayBlockedChange,
-    onTrackIdChange,
-    onPeriodStartSecondsChange,
     playerInstanceRef,
   }: PlayerProps): ReactElement => {
     // We attempt auto-play; if blocked by the browser, UI elsewhere can prompt for a gesture.
     const onAutoplayBlockedChangeRef =
       useRef<PlayerProps["onAutoplayBlockedChange"]>(null);
-    const onTrackIdChangeRef = useRef<PlayerProps["onTrackIdChange"]>(null);
-    const onPeriodStartSecondsChangeRef =
-      useRef<PlayerProps["onPeriodStartSecondsChange"]>(null);
     const playerRef = useRef<MediaPlayerClass | null>(null);
 
     useEffect(() => {
       onAutoplayBlockedChangeRef.current = onAutoplayBlockedChange;
     }, [onAutoplayBlockedChange]);
-
-    useEffect(() => {
-      onTrackIdChangeRef.current = onTrackIdChange;
-    }, [onTrackIdChange]);
-
-    useEffect(() => {
-      onPeriodStartSecondsChangeRef.current = onPeriodStartSecondsChange;
-    }, [onPeriodStartSecondsChange]);
 
     // Initialize DASH player once on mount
     useEffect(() => {
@@ -108,25 +91,6 @@ const Player = React.memo(
       // Attach player to video element
       player.initialize(videoElement, manifestUrl, false);
 
-      const emitPeriodInfo = (maybeStreamInfo?: StreamInfo | null) => {
-        // `PERIOD_SWITCH_COMPLETED` gives us the target `StreamInfo`, but on initial load
-        // we need to query dash.js state to learn the current period.
-        const streamInfo =
-          maybeStreamInfo ??
-          player.getCurrentTrackFor("audio")?.streamInfo ??
-          null;
-
-        const streamInfoId = streamInfo?.id as string | undefined;
-        if (streamInfoId?.startsWith("period_")) {
-          const trackId = streamInfoId.slice("period_".length);
-          onTrackIdChangeRef.current?.(trackId);
-        }
-
-        if (typeof streamInfo?.start === "number") {
-          onPeriodStartSecondsChangeRef.current?.(streamInfo.start);
-        }
-      };
-
       // Browsers refuse audible autoplay by default, but allow it muted. Falling back to muted
       // playback keeps the element genuinely playing, so dash.js goes on driving the playhead,
       // the period events and the manifest refresh, and nothing downstream needs a notion of a
@@ -153,19 +117,16 @@ const Player = React.memo(
       };
 
       const handleStreamInitialized = () => {
-        attemptAutoplay();
-        emitPeriodInfo();
+        void attemptAutoplay();
       };
 
       const handlePlaybackError = (e: PlaybackErrorEvent) => {
         console.error("DASH playback error:", e);
       };
 
-      const handlePeriodSwitch = (e: PeriodSwitchEvent) => {
+      const handlePeriodSwitch = () => {
         const currentLatency =
           player.getCurrentLiveLatency() - player.getTargetLiveDelay();
-
-        emitPeriodInfo(e.toStreamInfo);
 
         if (currentLatency < -1.0) {
           const waitTimeSeconds = 1.0;
