@@ -127,14 +127,27 @@ const Player = React.memo(
         }
       };
 
-      // Define event handlers inside useEffect to avoid dependency issues
+      // Browsers refuse audible autoplay by default, but allow it muted. Falling back to muted
+      // playback keeps the element genuinely playing, so dash.js goes on driving the playhead,
+      // the period events and the manifest refresh, and nothing downstream needs a notion of a
+      // stalled player -- the listener simply sees the volume control in its muted state.
       const attemptAutoplay = async () => {
         try {
           await videoElement.play();
           onAutoplayBlockedChangeRef.current?.(false);
+          return;
         } catch (err) {
-          // Autoplay blocked; require a user gesture.
-          console.warn("Autoplay blocked:", err);
+          console.warn("Audible autoplay refused; retrying muted:", err);
+        }
+
+        videoElement.muted = true;
+
+        try {
+          await videoElement.play();
+          onAutoplayBlockedChangeRef.current?.(false);
+        } catch (err) {
+          // Even muted playback was refused, so nothing moves until a gesture arrives.
+          console.warn("Muted autoplay refused:", err);
           onAutoplayBlockedChangeRef.current?.(true);
         }
       };

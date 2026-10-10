@@ -55,6 +55,23 @@ const VolumeControl = ({
     video.muted = muted;
   }, [videoRef, muted]);
 
+  // Player mutes the element itself when the browser refuses audible autoplay, so mirror the
+  // element rather than assuming this control is its only writer. Storage is deliberately not
+  // written here: a forced mute is the browser's doing, not a preference the listener expressed.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const sync = () => {
+      setMuted(video.muted);
+      setVolume(video.volume);
+    };
+
+    sync();
+    video.addEventListener("volumechange", sync);
+    return () => video.removeEventListener("volumechange", sync);
+  }, [videoRef]);
+
   const handleVolumeChange = (next: number) => {
     const clamped = clamp01(next);
     setVolume(clamped);
