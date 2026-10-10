@@ -22,6 +22,7 @@ const NOW_POLL_MS = 2000;
 
 interface PeriodInfo {
   trackId: string;
+  albumId: string;
   startSeconds: number;
 }
 
@@ -84,6 +85,7 @@ function App(): ReactElement {
             ? previous
             : {
                 trackId: data.track_id,
+                albumId: data.album_id,
                 startSeconds: data.period_start_seconds,
               },
         );
@@ -141,8 +143,11 @@ function App(): ReactElement {
     return () => controller.abort();
   }, [currentPeriod?.trackId]);
 
+  // Keyed on the album the station reports, not on the album of the track metadata we happen to
+  // hold: that goes null between tracks, which would tear down the album -- and with it the cover
+  // and the tracklist -- on every track change, even within one album.
   useEffect(() => {
-    const albumId = trackInfo?.album_id;
+    const albumId = currentPeriod?.albumId;
     if (!albumId) {
       setCurrentAlbum(null);
       return;
@@ -175,7 +180,7 @@ function App(): ReactElement {
     void fetchAlbum();
 
     return () => controller.abort();
-  }, [trackInfo?.album_id]);
+  }, [currentPeriod?.albumId]);
 
   const handleRequestPlay = useCallback(async () => {
     const video = videoRef.current;
@@ -229,6 +234,8 @@ function App(): ReactElement {
 
           <NowPlaying
             nowPlaying={trackInfo}
+            coverUrl={currentAlbum?.cover_url ?? null}
+            albumName={currentAlbum?.album_name ?? null}
             videoRef={videoRef as RefObject<HTMLVideoElement>}
             periodStartSeconds={currentPeriod?.startSeconds ?? null}
             autoplayBlocked={autoplayBlocked}

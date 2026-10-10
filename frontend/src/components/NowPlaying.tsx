@@ -25,6 +25,9 @@ interface NowPlayingData {
 
 interface NowPlayingProps {
   nowPlaying: NowPlayingData | null;
+  /** From the album, so it survives the metadata gap between tracks of one album. */
+  coverUrl: string | null;
+  albumName: string | null;
   videoRef: RefObject<HTMLVideoElement>;
   periodStartSeconds: number | null;
   autoplayBlocked: boolean;
@@ -34,6 +37,8 @@ interface NowPlayingProps {
 
 function NowPlaying({
   nowPlaying,
+  coverUrl,
+  albumName,
   videoRef,
   periodStartSeconds,
   autoplayBlocked,
@@ -95,7 +100,6 @@ function NowPlaying({
     return () => clearInterval(interval);
   }, [nowPlaying, periodStartSeconds, videoRef]);
 
-  const coverUrl = nowPlaying?.cover_url ?? "";
   useEffect(() => {
     if (!coverUrl) {
       setCoverStatus("idle");
@@ -118,8 +122,10 @@ function NowPlaying({
   }, [currentElapsed, nowPlaying]);
 
   const progressPct = isLoading ? 0 : progress;
-  const showCoverPlaceholder = isLoading || coverStatus !== "loaded";
-  const showCoverSpinner = isLoading || coverStatus === "loading";
+  // Tied to the cover alone: a track change within an album leaves it loaded, so the artwork
+  // stays put while the title below it skeletons.
+  const showCoverPlaceholder = coverStatus !== "loaded";
+  const showCoverSpinner = coverStatus === "loading";
   const showTextSkeleton = isLoading;
 
   return (
@@ -143,7 +149,7 @@ function NowPlaying({
                 : "cover-art__img"
             }
             src={coverUrl}
-            alt={nowPlaying?.album_name ?? "Cover"}
+            alt={albumName ?? "Cover"}
             onLoad={() => setCoverStatus("loaded")}
             onError={() => setCoverStatus("error")}
           />
