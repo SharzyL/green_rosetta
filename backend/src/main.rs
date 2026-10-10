@@ -573,6 +573,7 @@ async fn main() -> Result<()> {
         .route("/stream/manifest.mpd", get(manifest))
         .route("/api/tracks/{track_id}", get(api::track_info))
         .route("/api/albums/{album_id}", get(api::album))
+        .route("/api/now", get(api::now_playing))
         .route("/api/utc", get(api::utc_time))
         .route("/api/sync/time", get(api::sync_time));
 

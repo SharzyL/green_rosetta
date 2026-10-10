@@ -32,6 +32,15 @@ pub struct Scheduler {
     db: Arc<tokio::sync::RwLock<Database>>,
 }
 
+/// What the schedule holds at one point on the presentation timeline.
+#[derive(Debug, Clone)]
+pub struct ScheduledAt {
+    pub album_id: String,
+    pub track_id: String,
+    pub start_seconds: f64,
+    pub duration_seconds: f64,
+}
+
 /// A point-in-time view of which albums the scheduler currently has on air or queued ahead.
 #[derive(Debug, Clone, Default)]
 pub struct SchedulingSnapshot {
@@ -159,6 +168,23 @@ impl Scheduler {
             }
         }
         snap
+    }
+
+    /// What is scheduled at a point on the presentation timeline, if anything.
+    ///
+    /// The window only spans roughly `[t_now - tsbd, t_now + min_future]`, so a caller asking
+    /// about a moment outside it gets `None` rather than a guess.
+    pub async fn scheduled_at(&self, seconds: f64) -> Option<ScheduledAt> {
+        let queue = self.queue.read().await;
+        queue
+            .iter()
+            .find(|st| st.start_seconds <= seconds && seconds < st.end_seconds())
+            .map(|st| ScheduledAt {
+                album_id: st.album_id.clone(),
+                track_id: st.track_id.clone(),
+                start_seconds: st.start_seconds,
+                duration_seconds: st.duration_seconds,
+            })
     }
 
     async fn get_album_track(

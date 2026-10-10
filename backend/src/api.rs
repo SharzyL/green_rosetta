@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
 };
 use serde::{Deserialize, Serialize};
@@ -391,6 +391,49 @@ pub(crate) async fn sync_time() -> Json<TimeSync> {
         timestamp: now.format("%Y-%m-%dT%H:%M:%S.%3fZ").to_string(),
         unix_millis: now.timestamp_millis(),
     })
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct NowQuery {
+    /// Point on the presentation timeline to ask about. Defaults to the live edge.
+    ///
+    /// Clients pass their own playhead so the answer matches what they are hearing; one that
+    /// never started playing passes where its playhead would be, and gets the live track.
+    t: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct NowResponse {
+    pub track_id: String,
+    pub album_id: String,
+    pub period_start_seconds: f64,
+    pub duration_seconds: f64,
+}
+
+/// What is on air at a given point on the timeline.
+///
+/// The client cannot always work this out for itself: a browser that refuses autoplay leaves the
+/// player with no moving playhead, no period events and a manifest it fetched once, so the only
+/// reliable source is the schedule itself.
+pub(crate) async fn now_playing(
+    State(state): State<AppState>,
+    Query(query): Query<NowQuery>,
+) -> Result<Json<NowResponse>, (StatusCode, String)> {
+    let seconds = query.t.unwrap_or_else(|| state.scheduler.t_now_seconds());
+
+    let scheduled = state.scheduler.scheduled_at(seconds).await.ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("nothing scheduled at t={seconds}"),
+        )
+    })?;
+
+    Ok(Json(NowResponse {
+        track_id: scheduled.track_id,
+        album_id: scheduled.album_id,
+        period_start_seconds: scheduled.start_seconds,
+        duration_seconds: scheduled.duration_seconds,
+    }))
 }
 
 pub(crate) async fn utc_time() -> (HeaderMap, String) {
