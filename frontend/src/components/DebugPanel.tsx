@@ -2,6 +2,7 @@ import type { MediaPlayerClass } from "dashjs";
 import { type ReactElement, type RefObject, useEffect, useState } from "react";
 import "./DebugPanel.css";
 import type { TrackInfoData } from "../App";
+import { playheadFor } from "../lib/playhead";
 
 interface DebugPanelProps {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -58,6 +59,9 @@ function DebugPanel({
       if (video) {
         media.push(["paused", String(video.paused)]);
         media.push(["currentTime", fmt(video.currentTime)]);
+        // Diverges from currentTime exactly while the element is stopped; that gap is how far
+        // the station has moved on without us.
+        media.push(["playhead", fmt(playheadFor(video)())]);
         media.push(["muted", String(video.muted)]);
         media.push(["volume", fmt(video.volume)]);
         media.push(["playbackRate", fmt(video.playbackRate, 3)]);
@@ -96,7 +100,7 @@ function DebugPanel({
 
       const inTrack =
         video && periodStartSeconds != null
-          ? video.currentTime - periodStartSeconds
+          ? playheadFor(video)() - periodStartSeconds
           : null;
       const app: Rows = [
         ["trackId", currentTrackId ?? "—"],
