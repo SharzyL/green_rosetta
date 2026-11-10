@@ -1,0 +1,44 @@
+{
+  "private": true,
+  "name": "green-rosetta",
+  "version": "0.1.0",
+  "description": "Music radio streaming service with DASH/CMAF, on Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "build:frontend": "vite build frontend --outDir ../dist/frontend --emptyOutDir",
+    "dev:frontend": "vite serve frontend",
+    "preview:frontend": "vite preview --outDir dist/frontend",
+    "dev": "wrangler dev --port 8787",
+    "gentypes": "wrangler types --strict-vars false",
+    "build": "wrangler deploy --dry-run --outdir=dist/worker",
+    "hash-password": "node scripts/bcrypt.js",
+    "test": "vitest",
+    "fmt": "biome format --write",
+    "lint": "biome check",
+    "typecheck": "tsc --noEmit -p worker && tsc --noEmit -p worker/test && tsc --noEmit -p frontend",
+    "coverage": "vitest run --coverage"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt-ts": "^8.0.1",
+    "dashjs": "^5.2.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@types/node": "^25.9.9",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-istanbul": "4.1.10",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.4",
+    "vitest": "4.1.10",
+    "wrangler": "^4.149.0"
+  }
+}

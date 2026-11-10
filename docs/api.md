@@ -9,20 +9,18 @@ This document describes the HTTP API in API Blueprint format.
 
 ## Host
 
-The base URL is configured via `server.base_url` in `backend.config.toml`.
+The API is served by the Cloudflare Worker, on the same origin as the web player.
 
-+ Host: `http://127.0.0.1:8080`
++ Host: `http://127.0.0.1:8787`
 
 ## Notes
 
 - Streaming clients should load `GET /stream/manifest.mpd` and then follow the segment URLs
   embedded in the MPD.
-- MPD `initialization` and `media` URLs are URL-encoded by the backend.
-- In local mode, the backend serves `/media/*`.
-- In S3 mode, segment URLs in the MPD point at `storage.s3.public_access_domain` and are fetched
-  directly from that domain; the backend still serves the metadata and admin APIs.
-- When the backend is started with `--web-dir`, unknown browser navigations are redirected to
-  `/404/` (the dedicated 404 entrypoint).
+- MPD `initialization` and `media` URLs, and every `cover_url`, point at `PUBLIC_MEDIA_URL` (the
+  bucket's public origin) and are fetched directly from there. They are URL-encoded by the worker.
+- Unknown browser navigations are redirected to `/404/` (the dedicated 404 entrypoint).
+- Errors are plain-text bodies.
 
 # Group Health
 
@@ -76,7 +74,7 @@ Dynamic DASH MPD with multiple Periods, one per track in the current scheduler w
 + Response 200 (application/dash+xml)
     + Headers
 
-            Cache-Control: max-age=2
+            Cache-Control: no-cache
 
     + Body
 
@@ -87,16 +85,44 @@ Dynamic DASH MPD with multiple Periods, one per track in the current scheduler w
                  publishTime="2026-01-20T00:00:10.000Z"
                  timeShiftBufferDepth="PT30S"
                  suggestedPresentationDelay="PT10S">
-              <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="http://127.0.0.1:8080/api/utc" />
+              <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="/api/utc" />
               <!-- Periods omitted -->
             </MPD>
 
 # Group Metadata
 
+## Now Playing [/api/now{?t}]
+
+What is on air at a point on the presentation timeline (seconds since the MPD's
+`availabilityStartTime`). Clients pass their own playhead so the answer matches what they hear.
+
++ Parameters
+    + t: `1234.5` (number, optional) - Timeline position; defaults to the live edge
+
+### Get the scheduled track [GET]
+
++ Response 200 (application/json)
+    + Body
+
+            {
+              "track_id": "662b7d4cd5",
+              "album_id": "35f03850c0",
+              "period_start_seconds": 1200.0,
+              "duration_seconds": 39.96
+            }
+
++ Response 400 (text/plain)
+
+        Invalid t: abc
+
++ Response 404 (text/plain)
+
+        nothing scheduled at t=-100
+
 ## Track Info [/api/tracks/{track_id}]
 
-Query track metadata by `track_id`. The frontend uses this when it learns the active Period id
-from dash.js (Period ids are `period_{track_id}`).
+Query track metadata by `track_id`, e.g. the one `/api/now` returned (Period ids are
+`period_{track_id}`).
 
 + Parameters
     + track_id: `662b7d4cd5` (string) - Track ID
@@ -110,7 +136,7 @@ from dash.js (Period ids are `period_{track_id}`).
               "album_id": "35f03850c0",
               "album_name": "Kikuo Miku 7",
               "album_artist": "Kikuo",
-              "cover_url": "/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg",
+              "cover_url": "https://media.example.com/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg",
               "track_id": "662b7d4cd5",
               "track_title": "Twins at the carousel",
               "track_artist": "Kikuo",
@@ -146,7 +172,7 @@ Query album metadata and track list by `album_id`.
               "album_catalog_number": "SYWC-7814, SVWC-7815",
               "musicbrainz_album_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
               "disc_count": 1,
-              "cover_url": "/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg",
+              "cover_url": "https://media.example.com/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg",
               "tracks": [
                 {
                   "track_id": "662b7d4cd5",
@@ -163,30 +189,11 @@ Query album metadata and track list by `album_id`.
 
         Album not found
 
-# Group Media
-
-## Media Files [/media/{path}]
-
-Served only in local storage mode. In S3 mode, clients fetch media directly from the public domain
-URLs embedded in the MPD.
-
-+ Parameters
-    + path: `albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg` (string) - URL-encoded media path
-
-### Get media bytes [GET]
-
-+ Response 200
-    + Headers
-
-            Content-Type: image/jpeg
-
-+ Response 404 (text/plain)
-
-        Not Found
-
 # Group Admin
 
-Admin endpoints are cookie-authenticated. Sessions are stored in memory (not persisted).
+Admin endpoints are cookie-authenticated. Sessions, like album toggles, are kept in the station's
+Durable Object storage and survive restarts. All admin endpoints share a rate limit
+(`ADMIN_RATE_LIMIT_PER_SECOND`) and answer `429 Rate limit exceeded` beyond it.
 
 - Cookie name: `gr_admin_session`
 - Cookie flags: `HttpOnly; SameSite=Lax; Path=/api/admin`
@@ -216,9 +223,7 @@ Admin endpoints are cookie-authenticated. Sessions are stored in memory (not per
 
         Invalid credentials
 
-+ Response 503 (text/plain)
-
-        Admin authentication is not configured
+When `SCRUTINIZER_USERNAME` or `SCRUTINIZER_PASSWORD_HASH` is unset, every login is rejected.
 
 ## Logout [/api/admin/logout]
 
@@ -265,7 +270,7 @@ Admin endpoints are cookie-authenticated. Sessions are stored in memory (not per
                 "album_artist": "Kikuo",
                 "enabled": true,
                 "track_count": 12,
-                "cover_url": "/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg"
+                "cover_url": "https://media.example.com/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg"
               }
             ]
 
@@ -298,7 +303,7 @@ Admin endpoints are cookie-authenticated. Sessions are stored in memory (not per
               "album_artist": "Kikuo",
               "enabled": true,
               "track_count": 12,
-              "cover_url": "/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg"
+              "cover_url": "https://media.example.com/media/albums/35f03850c0%20-%20Kikuo%20-%20Kikuo_Miku_7/cover.jpg"
             }
 
 + Response 401 (text/plain)
@@ -309,3 +314,33 @@ Admin endpoints are cookie-authenticated. Sessions are stored in memory (not per
 
         Album not found
 
+## Reload [/api/admin/reload]
+
+### Reload metadata [POST]
+
+Re-read `metadata/*.yaml` from the bucket. Toggles carry over by album id; the schedule is kept, so
+listeners' timeline stays continuous. On failure the current catalogue keeps serving.
+
++ Request
+    + Headers
+
+            Cookie: gr_admin_session=...
+
++ Response 200 (application/json)
+    + Body
+
+            {
+              "albums_before": 19,
+              "albums_after": 20,
+              "added": 1,
+              "removed": 0,
+              "kept_disabled": 2
+            }
+
++ Response 409 (text/plain)
+
+        reload already in progress
+
++ Response 500 (text/plain)
+
+        reload failed: Invalid album metadata in 'metadata/x.yaml': ...

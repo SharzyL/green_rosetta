@@ -2,8 +2,8 @@
  * API Configuration
  * Uses same-origin relative URLs.
  *
- * - Dev: Vite proxy forwards /api, /stream, /media to the backend.
- * - Prod: serve frontend and backend from the same origin (or via reverse proxy).
+ * - Dev: Vite proxy forwards /api and /stream to the worker (`pnpm dev`).
+ * - Prod: the worker serves the frontend and the API from the same origin.
  */
 
 export const API_BASE_URL = "";

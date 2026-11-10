@@ -6,3 +6,8 @@ result*
 /test_dir
 /backend.config.toml
 /generator.config.toml
+node_modules/
+/dist
+/coverage
+.wrangler
+.dev.vars*

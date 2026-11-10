@@ -6,71 +6,24 @@ A music radio streaming service with DASH/CMAF streaming for seamless, synchroni
 
 Green Rosetta consists of three components:
 
-1. **Backend** (Rust/Axum): Streaming server that generates DASH manifests and serves media
-2. **Generator** (Rust): CLI tool for processing audio files into CMAF segments
-3. **Frontend** (React/TypeScript): Web player with live synchronization
+1. **Worker** (TypeScript, Cloudflare Workers): generates the live DASH manifest, keeps the station schedule, serves the API and the web player
+2. **Generator** (Rust): CLI tool for processing audio files into CMAF segments and per-album metadata
+3. **Frontend** (React/TypeScript): web player with live synchronization, plus the admin UI at `/scrutinizer/`
 
-## Installation
-
-### Using Nix (Recommended)
-
-Build and install the package:
-
-```bash
-nix build
-```
-
-The package installs:
-- `/bin/green-rosetta-backend` - Streaming server
-- `/bin/green-rosetta-generator` - Audio processing tool
-- `/share/green-rosetta/www/` - Web player assets
-
-### NixOS Module
-
-Add to your NixOS configuration:
-
-```nix
-{
-  inputs.green-rosetta.url = "github:SharzyL/green-rosetta";
-
-  outputs = { nixpkgs, green-rosetta, ... }: {
-    nixosConfigurations.yourhost = nixpkgs.lib.nixosSystem {
-      modules = [
-        green-rosetta.nixosModules.default
-        {
-          services.green-rosetta = {
-            enable = true;
-            listen = "0.0.0.0:8080";
-            configFile = "/etc/green-rosetta/backend.config.toml";
-          };
-        }
-      ];
-    };
-  };
-}
-```
-
-### Manual Installation
-
-Requirements:
-- Rust 1.70+
-- Node.js 18+
-- pnpm
-- FFmpeg with AAC support
-
-```bash
-# Build backend and generator
-cargo build --release --workspace
-
-# Build frontend
-cd frontend
-pnpm install
-pnpm build
-```
+Media and metadata live in an R2 bucket. Players fetch segments straight from the bucket's public domain; the
+worker only reads `metadata/*.yaml`. The station's schedule, album toggles and admin sessions are held by a
+single Durable Object, so every listener hears the same thing and an eviction resumes rather than resets.
 
 ## Quick Start
 
 ### 1. Generate Audio Content
+
+The generator is packaged by the Nix flake (or build it with `cargo build --release`). It needs FFmpeg with AAC
+and Opus support.
+
+```bash
+nix build   # ./result/bin/green-rosetta-generator
+```
 
 Process your music library into CMAF segments:
 
@@ -85,82 +38,80 @@ green-rosetta-generator generate \
 Note that currently we only support scanning a flat-layout directory. It means that every subdirectory to /path/to/music represents an album (possibly with multiple discs). Each album sholud contain a `{cover,foler}.{jpg,png}` in its root. And it is highly suggested to tag all audio files with [Picard](https://picard.musicbrainz.org/).
 
 This creates:
+
 - `./data/media/` - CMAF segments and cover images
 - `./data/metadata/` - Per-album YAML metadata files
 
-### 2. Configure Backend
+### 2. Upload to R2
 
-Create `backend.config.toml` and `generator.config.toml`.
+The bucket layout mirrors `./data`: `media/` and `metadata/` at the root. Give the bucket a public domain
+(or custom domain) so players can fetch `media/` directly, and allow the player's origin in the bucket's CORS
+policy.
 
-Both files are gitignored. Start from the examples in `docs/`:
+[rclone](https://rclone.org/) is the recommended way to upload. Configure an S3 remote once with
+`rclone config` (type `s3`, provider `Cloudflare`, your R2 access key, and
+`https://<account_id>.r2.cloudflarestorage.com` as the endpoint); the entry in `~/.config/rclone/rclone.conf`
+looks like:
+
+```ini
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = YOUR_ACCESS_KEY
+secret_access_key = YOUR_SECRET_KEY
+endpoint = https://<account_id>.r2.cloudflarestorage.com
+```
+
+Then sync the generator output into the bucket:
 
 ```bash
-cp docs/backend.config.toml ./backend.config.toml
-cp docs/generator.config.toml ./generator.config.toml
+rclone sync ./data r2:rosetta --progress
 ```
 
-Minimal `backend.config.toml` (local storage) looks like:
+Use `rclone sync ./data/media r2:rosetta/media` to push only the (much larger) media segments when metadata
+has not changed. Add `--checksum` to skip already-uploaded segments without re-reading timestamps, and
+`--transfers 16` to parallelize uploads.
 
-```toml
-[storage]
-backend = "local"
-base_path = "./data"
+After uploading new metadata, press "reload" in the admin UI (or `POST /api/admin/reload`) so the running
+station picks it up.
 
-[streaming]
-time_shift_buffer_depth = 30.0
-suggested_presentation_delay = 10.0
-min_future_manifest_duration = 60.0
+### 3. Deploy the Worker
 
-[admin]
-username = "admin"
-password_hash = "$2b$12$REPLACE_ME_WITH_A_BCRYPT_HASH"
-
-[logging]
-level = "info"
-```
-
-### 3. Start Backend
+Edit the bottom part of `wrangler.toml`: the R2 `bucket_name`, `PUBLIC_MEDIA_URL` (the bucket's public
+origin), and optionally a `[[routes]]` custom domain. Then set the admin credentials and deploy:
 
 ```bash
-pnpm -C frontend build
-green-rosetta-backend --config backend.config.toml --web-dir frontend/dist
+pnpm install
+pnpm wrangler secret put SCRUTINIZER_USERNAME
+pnpm -s hash-password | pnpm wrangler secret put SCRUTINIZER_PASSWORD_HASH
+pnpm build:frontend
+pnpm deploy
 ```
 
-The server will:
-- Load album metadata from `./data/metadata/`
-- Serve DASH manifests at `/stream/manifest.mpd`
-- Serve media segments from `./data/media/`
-- Provide REST API at `/api/*`
+`hash-password` uses 8 bcrypt rounds by default (`pnpm hash-password -n 10` for more); verification runs
+inside the Worker, so keep the cost low.
 
-### 4. Access Web Player
-
-Open your browser to `http://localhost:8080` to access the web player.
+Pushes to `goshujin` deploy automatically through `.github/workflows/deploy.yml` once the repository has
+`CF_API_TOKEN` and `CF_ACCOUNT_ID` secrets in a `deploy` environment.
 
 ## Configuration
 
-### Backend Configuration
+### Worker (`wrangler.toml`)
 
-**Server Settings:**
-- `server.host` - Listen address (default: "0.0.0.0")
-- `server.port` - Listen port (default: 8080)
-- `server.base_url` - Public URL for manifest generation
+- `PUBLIC_MEDIA_URL` - public origin of the bucket; segment URLs are `{PUBLIC_MEDIA_URL}/media/...`
+- `TIME_SHIFT_BUFFER_DEPTH` - DVR window in seconds
+- `SUGGESTED_PRESENTATION_DELAY` - client startup delay behind the live edge
+- `MIN_FUTURE_MANIFEST_DURATION` - how much timeline ahead of now the manifest always covers
+- `ADMIN_RATE_LIMIT_PER_SECOND` - requests per second across all admin endpoints
+- `ADMIN_SESSION_TTL_SECONDS` - admin cookie lifetime
+- Secrets: `SCRUTINIZER_USERNAME`, `SCRUTINIZER_PASSWORD_HASH` (bcrypt)
 
-**Storage Settings:**
-- `storage.backend` - "local" or "s3"
-- `storage.base_path` - Root directory for local storage
-- `storage.s3.*` - S3 configuration (bucket, region, credentials)
-
-**Streaming Settings:**
-- `streaming.time_shift_buffer_depth` - DVR window in seconds
-- `streaming.suggested_presentation_delay` - Client startup delay
-- `streaming.min_future_manifest_duration` - Future timeline coverage
-
-Backend does not define audio profiles. Audio encoding profiles / adaptation sets are configured
-in `generator.config.toml` and persisted into `metadata/*.yaml` by the generator.
+The worker does not define audio profiles. Audio encoding profiles / adaptation sets are configured in
+`generator.config.toml` and persisted into `metadata/*.yaml` by the generator.
 
 ### Generator Configuration
 
-Create `generator.config.toml`:
+Create `generator.config.toml` (gitignored; start from `docs/generator.config.toml`):
 
 ```toml
 [streaming]
@@ -173,77 +124,17 @@ sample_rate = 48000
 channels = 2
 ```
 
-### S3 Storage
-
-For S3-compatible storage:
-
-```toml
-[storage]
-backend = "s3"
-
-[storage.s3]
-bucket = "my-music-bucket"
-region = "us-east-1"
-endpoint = "https://s3.amazonaws.com"
-access_key_id = "YOUR_ACCESS_KEY"
-public_access_domain = "https://cdn.example.com"
-```
-
-Set the secret key via environment variable:
-
-```bash
-export AWS_SECRET_ACCESS_KEY="your-secret-key"
-```
-
-#### Uploading data with rclone
-
-The generator writes to a local directory, so uploading the resulting
-`media/` and `metadata/` trees to S3 is a separate step. [rclone](https://rclone.org/)
-is the recommended way to do this.
-
-Configure an S3 remote once:
-
-```bash
-rclone config
-```
-
-Pick `n` (new remote), name it (e.g. `gr-s3`), choose `s3` as the type, then
-fill in provider, `access_key_id`, `secret_access_key`, `region`, and
-`endpoint` to match `[storage.s3]` in `backend.config.toml`. The resulting
-entry in `~/.config/rclone/rclone.conf` looks like:
-
-```ini
-[gr-s3]
-type = s3
-provider = AWS
-access_key_id = YOUR_ACCESS_KEY
-secret_access_key = YOUR_SECRET_KEY
-region = us-east-1
-endpoint = https://s3.amazonaws.com
-```
-
-Then sync the generator output into the bucket. The bucket layout must
-mirror the local `./data` directory — `media/` and `metadata/` at the root:
-
-```bash
-rclone sync ./data gr-s3:my-music-bucket --progress
-```
-
-Use `rclone sync ./data/media gr-s3:my-music-bucket/media` to push only the
-(much larger) media segments when metadata has not changed. Add `--checksum`
-to skip already-uploaded segments without re-reading timestamps, and
-`--transfers 16` to parallelize uploads.
-
 ## API Reference
+
+See [docs/api.md](docs/api.md).
 
 ### Streaming Endpoints
 
-- `GET /stream/manifest.mpd` - DASH manifest
-- `GET /media/albums/{album}/track_{disc}_{track}/{profile}/init.mp4` - Init segment
-- `GET /media/albums/{album}/track_{disc}_{track}/{profile}/chunk_{N}.m4s` - Media segment
+- `GET /stream/manifest.mpd` - DASH manifest (segments are fetched from `PUBLIC_MEDIA_URL`)
 
 ### Metadata Endpoints
 
+- `GET /api/now?t={seconds}` - What is on air at a point on the presentation timeline
 - `GET /api/tracks/{track_id}` - Track information
 - `GET /api/albums/{album_id}` - Album information with tracklist
 - `GET /api/sync/time` - Server time for synchronization
@@ -256,64 +147,34 @@ to skip already-uploaded segments without re-reading timestamps, and
 - `GET /api/admin/me` - Session check
 - `GET /api/admin/albums` - List all albums
 - `PUT /api/admin/albums/{album_id}/enabled` - Enable/disable album
+- `POST /api/admin/reload` - Re-read metadata from the bucket
 
-Admin endpoints use a cookie session (`gr_admin_session`) and require configured credentials.
+Admin endpoints use a cookie session (`gr_admin_session`) and require configured credentials. Album toggles
+persist across restarts.
 
 ## Development
 
 ```bash
-# Run Rust tests
-cargo test --workspace
+pnpm install
 
-# Format code
-cargo fmt --all
+pnpm test           # worker tests, in the Workers runtime
+pnpm lint           # biome
+pnpm typecheck
+pnpm fmt
+
+cargo test          # generator
+cargo clippy
 nix fmt
-
-# Lint
-cargo clippy --workspace
-pnpm -C frontend check
 ```
 
-For frontend development, run the backend without `--web-dir` option.
-
-```bash
-green-rosetta-backend --config backend.config.toml &
-cd frontend
-pnpm dev
-```
-
-Note that in this case the frontend expects backend at `http://localhost:8081`, as configured in `vite.config.ts`.
-
-## Deployment
-
-### Systemd Service
-
-Create `/etc/systemd/system/green-rosetta.service`:
+`pnpm dev` runs the worker locally on port 8787 against the real bucket (`remote = true` in `wrangler.toml`;
+the worker never writes to it) and serves the last `pnpm build:frontend`. Put local admin credentials in
+`.dev.vars`:
 
 ```ini
-[Unit]
-Description=Green Rosetta Music Streaming Service
-After=network.target
-
-[Service]
-Type=simple
-User=green-rosetta
-Group=green-rosetta
-ExecStart=/usr/local/bin/green-rosetta-backend --config /etc/green-rosetta/backend.config.toml
-Restart=on-failure
-RestartSec=5s
-
-# Security hardening
-DynamicUser=true
-NoNewPrivileges=true
-
-[Install]
-WantedBy=multi-user.target
+SCRUTINIZER_USERNAME=admin
+SCRUTINIZER_PASSWORD_HASH=$2b$08$...
 ```
 
-Enable and start:
-
-```bash
-sudo systemctl enable --now green-rosetta
-```
-
+For frontend work with hot reload, run `pnpm dev` and `pnpm dev:frontend` side by side; Vite (port 3000)
+proxies `/api` and `/stream` to the worker.

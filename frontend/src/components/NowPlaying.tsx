@@ -6,25 +6,13 @@ import {
   useRef,
   useState,
 } from "react";
+import type { TrackInfoResponse } from "../../../shared/api";
 import "./NowPlaying.css";
 import { playheadFor } from "../lib/playhead";
 import VolumeControl from "./VolumeControl";
 
-interface NowPlayingData {
-  album_id: string;
-  album_name: string;
-  album_artist: string;
-  track_id: string;
-  track_title: string;
-  track_artist?: string;
-  track_number: number;
-  disc_number: number;
-  duration_seconds: number;
-  cover_url: string;
-}
-
 interface NowPlayingProps {
-  nowPlaying: NowPlayingData | null;
+  nowPlaying: TrackInfoResponse | null;
   /** From the album, so it survives the metadata gap between tracks of one album. */
   coverUrl: string | null;
   albumName: string | null;

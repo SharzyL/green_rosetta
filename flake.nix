@@ -30,7 +30,6 @@
           pnpm
           nodejs
           ffmpeg
-          sqlite
           pkg-config
         ]);
         shellHook = ''
@@ -48,7 +47,6 @@
       ];
 
       flake.overlays.default = overlay;
-      flake.nixosModules.default = import ./nix/nixos-module.nix;
 
       systems = inputs.nixpkgs.lib.systems.flakeExposed;
 
@@ -62,7 +60,7 @@
           overlays = [ overlay ];
         };
 
-        devShells.default = config.packages.default.passthru.bin.overrideAttrs (shellOverride pkgs);
+        devShells.default = config.packages.default.overrideAttrs (shellOverride pkgs);
 
         treefmt = {
           programs.rustfmt.enable = true;

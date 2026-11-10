@@ -1,0 +1,47 @@
+name: Test and Deploy
+on:
+  push:
+    branches:
+      - goshujin
+    paths-ignore: ["generator/**", "nix/**", "Cargo.*", "flake.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: deploy
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install Node"
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: "Install pnpm"
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+
+      - name: "Setup"
+        run: pnpm install --frozen-lockfile
+
+      - name: "Build Frontend"
+        run: pnpm build:frontend
+
+      - name: "Test"
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test run --testTimeout 15000
+
+      - name: "Deploy"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          pnpm wrangler deploy

@@ -5,27 +5,13 @@ import {
   useMemo,
   useState,
 } from "react";
+import type {
+  AdminAlbumSummaryResponse as AdminAlbum,
+  ReloadSummary,
+} from "../../shared/api";
 import "./App.css";
 import "./Scrutinizer.css";
 import { API_ENDPOINTS } from "./config";
-
-interface AdminAlbum {
-  album_id: string;
-  album_name: string;
-  album_artist: string;
-  enabled: boolean;
-  track_count: number;
-  cover_url: string;
-  scheduling_state?: "playing" | "queued" | null;
-}
-
-interface ReloadSummary {
-  albums_before: number;
-  albums_after: number;
-  added: number;
-  removed: number;
-  kept_disabled: number;
-}
 
 const Scrutinizer = (): ReactElement => {
   const [loggedIn, setLoggedIn] = useState<boolean>(false);

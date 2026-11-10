@@ -1,70 +1,23 @@
-{ stdenv
-, lib
+{ lib
 , rustPlatform
-, runCommand
-
-, pnpm
-, pnpmConfigHook
-, fetchPnpmDeps
-, nodejs
 }:
-let
-  # Build the frontend
+
+# The generator CLI. The player and API run on Cloudflare Workers (see wrangler.toml).
+rustPlatform.buildRustPackage {
   pname = "green-rosetta";
   version = "0.1.0";
-  frontend = stdenv.mkDerivation (finalAttrs: {
-    pname = "${pname}-frontend";
-    inherit version;
 
-    src = ../frontend;
-
-    nativeBuildInputs = [
-      nodejs
-      pnpm
-      pnpmConfigHook
+  src = with lib.fileset; toSource {
+    root = ./..;
+    fileset = unions [
+      ../Cargo.toml
+      ../Cargo.lock
+      ../generator
     ];
-
-    pnpmDeps = fetchPnpmDeps {
-      inherit (finalAttrs) pname version src;
-      fetcherVersion = 4;
-      hash = "sha256-NBYQMMzfYCKEZXvGMpVADyvCv7Vi4jYL8UQNJPtVJbU=";
-    };
-
-    postInstall = ''
-      pnpm build
-      mkdir -p $out
-      cp dist -rT $out
-    '';
-  });
-
-  bin = rustPlatform.buildRustPackage {
-    inherit pname version;
-
-    src = with lib.fileset; toSource {
-      root = ./..;
-      fileset = unions [
-        ../Cargo.toml
-        ../Cargo.lock
-        ../backend
-        ../generator
-      ];
-    };
-
-    passthru = { inherit frontend; };
-
-    cargoHash = "sha256-BVgEZdnEOWf47DRnewIUdkvobet4VLmuLT8zY/I46yA=";
-
-    # Build both workspace members
-    cargoBuildFlags = [ "--workspace" ];
-
-    doCheck = true;
   };
-in
-runCommand bin.name { } ''
-  mkdir -p $out/share/${pname}/www $out/bin
-  cp ${frontend} -rT $out/share/${pname}/www/
-  cp ${bin}/bin -rT $out/bin
-'' // {
-  passthru = { inherit bin frontend; };
-  inherit pname version;
+
+  # Vendored straight from the lockfile, so there is no hash to bump when dependencies change.
+  cargoLock.lockFile = ../Cargo.lock;
+
+  doCheck = true;
 }

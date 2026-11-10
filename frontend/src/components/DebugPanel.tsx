@@ -1,13 +1,13 @@
 import type { MediaPlayerClass } from "dashjs";
 import { type ReactElement, type RefObject, useEffect, useState } from "react";
 import "./DebugPanel.css";
-import type { TrackInfoData } from "../App";
+import type { TrackInfoResponse } from "../../../shared/api";
 import { playheadFor } from "../lib/playhead";
 
 interface DebugPanelProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   playerInstanceRef: RefObject<MediaPlayerClass | null>;
-  nowPlaying: TrackInfoData | null;
+  nowPlaying: TrackInfoResponse | null;
   periodStartSeconds: number | null;
   autoplayBlocked: boolean;
   currentTrackId: string | null;

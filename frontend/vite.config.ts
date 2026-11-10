@@ -2,8 +2,8 @@ import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Read API URL from environment, default to localhost:8081
-const apiUrl = process.env.VITE_API_URL || "http://localhost:8081";
+// Where `/api` and `/stream` go in dev: the worker under `pnpm dev`, unless overridden.
+const apiUrl = process.env.VITE_API_URL || "http://localhost:8787";
 
 export default defineConfig({
   plugins: [react()],
@@ -19,21 +19,15 @@ export default defineConfig({
         target: apiUrl,
         changeOrigin: true,
       },
-      "^/media": {
-        target: apiUrl,
-        changeOrigin: true,
-      },
     },
   },
   build: {
-    outDir: "dist",
     sourcemap: false,
-    minify: "terser",
     rollupOptions: {
       input: {
-        main: resolve(__dirname, "index.html"),
-        scrutinizer: resolve(__dirname, "scrutinizer/index.html"),
-        outsideNow: resolve(__dirname, "404/index.html"),
+        main: resolve(import.meta.dirname, "index.html"),
+        scrutinizer: resolve(import.meta.dirname, "scrutinizer/index.html"),
+        outsideNow: resolve(import.meta.dirname, "404/index.html"),
       },
     },
   },

@@ -8,9 +8,12 @@ import {
   useState,
 } from "react";
 import "./App.css";
-import AlbumTracklist, {
-  type AlbumResponse,
-} from "./components/AlbumTracklist";
+import type {
+  AlbumResponse,
+  NowResponse,
+  TrackInfoResponse,
+} from "../../shared/api";
+import AlbumTracklist from "./components/AlbumTracklist";
 import DebugPanel from "./components/DebugPanel";
 import NowPlaying from "./components/NowPlaying";
 import Player from "./components/Player";
@@ -26,28 +29,8 @@ interface PeriodInfo {
   startSeconds: number;
 }
 
-interface NowResponse {
-  track_id: string;
-  album_id: string;
-  period_start_seconds: number;
-  duration_seconds: number;
-}
-
-export interface TrackInfoData {
-  album_id: string;
-  album_name: string;
-  album_artist: string;
-  track_id: string;
-  track_title: string;
-  track_artist?: string;
-  track_number: number;
-  disc_number: number;
-  duration_seconds: number;
-  cover_url: string;
-}
-
 function App(): ReactElement {
-  const [trackInfo, setTrackInfo] = useState<TrackInfoData | null>(null);
+  const [trackInfo, setTrackInfo] = useState<TrackInfoResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstanceRef = useRef<MediaPlayerClass | null>(null);
@@ -127,7 +110,7 @@ function App(): ReactElement {
         if (!response.ok) {
           throw new Error(`Track API error: ${response.status}`);
         }
-        const data = (await response.json()) as TrackInfoData;
+        const data = (await response.json()) as TrackInfoResponse;
         setTrackInfo(data);
         setError(null);
       } catch (err) {

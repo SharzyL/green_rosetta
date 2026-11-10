@@ -1,30 +1,7 @@
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import type { AlbumResponse } from "../../../shared/api";
 import "./AlbumTracklist.css";
 import { ChevronDownIcon, ChevronUpIcon } from "./icons";
-
-export interface AlbumTrack {
-  track_id: string;
-  track_title: string;
-  track_artist?: string;
-  track_number: number;
-  disc_number: number;
-  duration_seconds: number;
-}
-
-export interface AlbumResponse {
-  album_id: string;
-  album_name: string;
-  album_artist: string;
-  release_date?: string | null;
-  original_release_date?: string | null;
-  album_label?: string | null;
-  album_media?: string | null;
-  album_catalog_number?: string | null;
-  musicbrainz_album_id?: string | null;
-  disc_count: number;
-  cover_url: string;
-  tracks: AlbumTrack[];
-}
 
 interface AlbumTracklistProps {
   album: AlbumResponse | null;

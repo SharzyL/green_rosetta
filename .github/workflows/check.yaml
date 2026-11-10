@@ -1,10 +1,11 @@
-name: Nix Flake Check
+name: Generator Check
 
 on:
   push:
-    branches: [ goshujin ]
+    branches: [goshujin]
+    paths-ignore: ["frontend/**", "worker/**", "shared/**"]
   pull_request:
-    branches: [ goshujin ]
+    branches: [goshujin]
 
 jobs:
   nix-build:
@@ -25,8 +26,3 @@ jobs:
       - name: Cargo check
         run: |
           nix develop -c cargo clippy -- -D warnings
-
-      - name: Frontend check
-        run: |
-          nix develop -c pnpm -C frontend install
-          nix develop -c pnpm -C frontend check

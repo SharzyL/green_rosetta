@@ -1,0 +1,55 @@
+name = "green-rosetta"
+compatibility_date = "2026-11-01"
+
+workers_dev = false
+main = "worker/index.ts"
+
+[assets]
+directory = "dist/frontend"
+# The worker answers /api and /stream itself, and turns asset misses into the 404 page.
+run_worker_first = true
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+# The one station everybody listens to: schedule, album toggles and admin sessions.
+name = "STATION"
+class_name = "Station"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Station"]
+
+[observability]
+enabled = true
+
+#----------------------------------------
+# lines below are what you should modify
+#----------------------------------------
+
+[[routes]]
+# Refer to https://developers.cloudflare.com/workers/wrangler/configuration/#routes
+pattern = "rosetta.shz.al"
+custom_domain = true
+
+[[r2_buckets]]
+# Holds `metadata/*.yaml` (read by the worker) and `media/` (fetched by players directly).
+binding = "MEDIA"
+bucket_name = "rosetta"
+# `wrangler dev` reads the real bucket; the worker never writes to it.
+remote = true
+
+[vars]
+# Public origin of the bucket; MPD segment URLs point at `{PUBLIC_MEDIA_URL}/media/...`.
+PUBLIC_MEDIA_URL = "https://syborg.sharzy.in"
+
+# DASH live window, in seconds.
+TIME_SHIFT_BUFFER_DEPTH = 60
+SUGGESTED_PRESENTATION_DELAY = 30
+# How much timeline ahead of "now" the MPD always covers.
+MIN_FUTURE_MANIFEST_DURATION = 60
+
+# Admin (scrutinizer) limits. Credentials are secrets:
+#   wrangler secret put SCRUTINIZER_USERNAME
+#   pnpm hash-password | wrangler secret put SCRUTINIZER_PASSWORD_HASH
+ADMIN_RATE_LIMIT_PER_SECOND = 5
+ADMIN_SESSION_TTL_SECONDS = 86400
