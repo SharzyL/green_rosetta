@@ -55,8 +55,12 @@ function App(): ReactElement {
     const controller = new AbortController();
 
     const poll = async () => {
+      // Until dash.js has loaded the manifest and parked the element at the live edge, the
+      // element sits at 0, a moment long since pruned from the schedule; ask about the live
+      // edge instead.
+      const t = video.currentTime === 0 ? undefined : playhead();
       try {
-        const response = await fetch(API_ENDPOINTS.now(playhead()), {
+        const response = await fetch(API_ENDPOINTS.now(t), {
           signal: controller.signal,
         });
         if (!response.ok) return;
