@@ -75,6 +75,28 @@ has not changed. Add `--checksum` to skip already-uploaded segments without re-r
 After uploading new metadata, press "reload" in the admin UI (or `POST /api/admin/reload`) so the running
 station picks it up.
 
+#### Edge caching for media
+
+Cloudflare only caches by file extension, and `.m4s` is not on its list, so without a rule every segment
+request goes to R2 (`cf-cache-status: DYNAMIC`). Every listener plays the same segment at the same moment,
+so caching them at the edge pays off. In the dashboard of the zone holding the bucket's public domain, add a
+Cache Rule (Rules → Cache Rules):
+
+| Field | Value |
+|---|---|
+| If incoming requests match | `(http.host eq "syborg.sharzy.in" and starts_with(http.request.uri.path, "/media/"))` (the host of `PUBLIC_MEDIA_URL`) |
+| Cache eligibility | Eligible for cache |
+| Edge TTL | Ignore cache-control header and use this TTL: 30 days |
+| Browser TTL | Respect origin |
+
+R2 answers CORS per request `Origin` (`Vary: Origin`), and cached hits keep the right
+`Access-Control-Allow-Origin` for each origin, so caching does not break other origins such as `localhost`.
+
+Re-encoding an album keeps its id and rewrites the same paths, so after uploading a re-encode, purge it
+(Caching → Configuration → Custom Purge → Prefix, `syborg.sharzy.in/media/albums/<album dir>/`), or players
+may get old segments that no longer match the metadata. A segment request answering
+`cf-cache-status: HIT` on a repeat confirms the rule is active.
+
 ### 3. Deploy the Worker
 
 Edit the bottom part of `wrangler.toml`: the R2 `bucket_name`, `PUBLIC_MEDIA_URL` (the bucket's public
