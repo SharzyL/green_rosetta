@@ -271,6 +271,18 @@ describe("static", () => {
     expect(await (await get("/health")).text()).toBe("OK");
   });
 
+  it("has pages preconnect to the media origin", async () => {
+    const page = await get("/");
+    expect(page.status).toBe(200);
+    expect(page.headers.get("Link")).toBe(
+      "<https://syborg.sharzy.in>; rel=preconnect; crossorigin, <https://syborg.sharzy.in>; rel=preconnect",
+    );
+    const asset = await get("/no/such/file.js", {
+      headers: { Accept: "application/json" },
+    });
+    expect(asset.headers.get("Link")).toBeNull();
+  });
+
   it("sends unknown pages to the 404 page and keeps fetches plain", async () => {
     const page = await get("/no/such/page", {
       headers: { Accept: "text/html" },

@@ -1,5 +1,5 @@
 import type { TimeSyncResponse } from "../shared/api";
-import { json, text } from "./common";
+import { json, mediaBaseUrl, text } from "./common";
 import { STATION_NAME } from "./station";
 
 export { Station } from "./station";
@@ -51,7 +51,7 @@ async function serveAsset(
   pathname: string,
 ): Promise<Response> {
   const res = await env.ASSETS.fetch(request);
-  if (res.status !== 404) return res;
+  if (res.status !== 404) return withMediaPreconnect(res, env);
 
   // Send unknown browser navigations to the dedicated 404 page; keep fetches as plain 404s.
   if (pathname === "/404")
@@ -65,6 +65,28 @@ async function serveAsset(
     return Response.redirect(new URL("/404/", request.url).toString(), 307);
   }
   return text("Not Found", 404);
+}
+
+/**
+ * Lets pages open the media origin's connection while the player is still loading, rather than
+ * when it asks for its first segment. The player's segment requests are CORS fetches, which use
+ * a separate connection from plain ones such as cover images, so both are warmed.
+ */
+function withMediaPreconnect(res: Response, env: Env): Response {
+  if (!res.ok || !res.headers.get("Content-Type")?.startsWith("text/html"))
+    return res;
+  let origin: string;
+  try {
+    origin = new URL(mediaBaseUrl(env)).origin;
+  } catch {
+    return res; // A misconfigured media URL breaks playback, not the page.
+  }
+  const out = new Response(res.body, res);
+  out.headers.append(
+    "Link",
+    `<${origin}>; rel=preconnect; crossorigin, <${origin}>; rel=preconnect`,
+  );
+  return out;
 }
 
 /** Cache-Control policy by route group, for successful responses only. */
