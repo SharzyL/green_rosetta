@@ -198,8 +198,13 @@ export class Catalogue {
 
 const METADATA_PREFIX = "metadata/";
 
-/** Read every `metadata/*.yaml` album from the bucket. Any malformed file fails the whole load. */
-export async function loadCatalogue(bucket: R2Bucket): Promise<Catalogue> {
+/**
+ * Reads and validates every album under `metadata/`, keyed by R2 key in key order (the playlist
+ * order). Throws, naming the file, if any of them is malformed, or if there are none.
+ */
+export async function loadAlbums(
+  bucket: R2Bucket,
+): Promise<Map<string, Album>> {
   const keys: string[] = [];
   let cursor: string | undefined;
   do {
@@ -216,12 +221,12 @@ export async function loadCatalogue(bucket: R2Bucket): Promise<Catalogue> {
       const obj = await bucket.get(key);
       if (!obj)
         throw new Error(`Metadata object '${key}' vanished while loading`);
-      return parseAlbumYaml(await obj.text(), key);
+      return [key, parseAlbumYaml(await obj.text(), key)] as const;
     }),
   );
 
   if (albums.length === 0) {
     throw new Error(`No album YAML files found under '${METADATA_PREFIX}'`);
   }
-  return new Catalogue(albums);
+  return new Map(albums);
 }

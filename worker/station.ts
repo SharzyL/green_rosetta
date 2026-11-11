@@ -19,8 +19,8 @@ import {
   parseCookie,
   verifyAdminPassword,
 } from "./auth";
-import type { Album, Catalogue } from "./catalogue";
-import { encodedDurationSeconds, loadCatalogue } from "./catalogue";
+import type { Album } from "./catalogue";
+import { Catalogue, encodedDurationSeconds, loadAlbums } from "./catalogue";
 import { HttpError, json, mediaBaseUrl, streamingConfig, text } from "./common";
 import { generateMpd } from "./dash";
 import type { ScheduleState, SchedulingSnapshot } from "./scheduler";
@@ -29,6 +29,10 @@ import { Scheduler } from "./scheduler";
 const SCHEDULE_KEY = "schedule";
 const DISABLED_KEY = "disabled";
 const SESSION_PREFIX = "session:";
+/** One stored album per R2 metadata key, so storage lists them in playlist order. */
+const CATALOGUE_PREFIX = "catalogue:";
+/** Storage reads and writes take at most this many keys per call. */
+const STORAGE_BATCH = 128;
 
 /** Name of the one station every request is routed to. */
 export const STATION_NAME = "station";
@@ -58,21 +62,32 @@ async function readJson<T>(request: Request): Promise<T> {
  * The radio station: the schedule every listener shares, the admin's album toggles and the admin
  * sessions, all persisted in this object's storage so an eviction resumes rather than resets.
  *
- * The catalogue itself is read from R2 on start and on `POST /api/admin/reload`, and held in memory.
+ * The catalogue is read from R2 and kept in memory, with a parsed copy in storage: waking up from
+ * that copy skips listing, fetching and parsing every metadata file before the first answer. A
+ * wake-up then re-reads R2 in the background, as does `POST /api/admin/reload`.
  */
 export class Station extends DurableObject<Env> {
   private scheduler!: Scheduler;
-  private reloading = false;
+  private syncing = false;
   private rateWindow = { startMs: 0, count: 0 };
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
-      const [catalogue, state, disabled] = await Promise.all([
-        loadCatalogue(env.MEDIA),
+      const [stored, state, disabled] = await Promise.all([
+        ctx.storage.list<Album>({ prefix: CATALOGUE_PREFIX }),
         ctx.storage.get<ScheduleState>(SCHEDULE_KEY),
         ctx.storage.get<string[]>(DISABLED_KEY),
       ]);
+      let catalogue: Catalogue;
+      if (stored.size > 0) {
+        catalogue = new Catalogue([...stored.values()]);
+      } else {
+        // First start: there is nothing to serve until the bucket has been read.
+        const albums = await loadAlbums(env.MEDIA);
+        await this.storeCatalogue(albums, stored);
+        catalogue = new Catalogue([...albums.values()]);
+      }
       const disabledSet = new Set(disabled ?? []);
       if (state) {
         this.scheduler = new Scheduler(state, catalogue, disabledSet);
@@ -88,6 +103,15 @@ export class Station extends DurableObject<Env> {
       console.log(
         `Loaded ${catalogue.albums.length} albums with ${catalogue.totalTracks} total tracks`,
       );
+
+      // The stored copy may predate an upload; catch up without holding up requests.
+      if (stored.size > 0) {
+        void this.syncCatalogue().catch((e) =>
+          console.warn(
+            `background catalogue refresh failed (serving stored copy): ${(e as Error).message}`,
+          ),
+        );
+      }
     });
   }
 
@@ -384,16 +408,26 @@ export class Station extends DurableObject<Env> {
    * the next `maintain` prunes whatever the new catalogue dropped.
    */
   private async reload(): Promise<Response> {
-    // Each load re-reads every metadata object, so only one runs at a time.
-    if (this.reloading) throw new HttpError(409, "reload already in progress");
-    this.reloading = true;
+    const summary = await this.syncCatalogue();
+    console.log("metadata reloaded", summary);
+    return json(summary);
+  }
+
+  /**
+   * Re-reads the catalogue from R2, adopts it and stores it. A failed read keeps the current one.
+   * Only one runs at a time: each re-reads every metadata object.
+   */
+  private async syncCatalogue(): Promise<ReloadSummary> {
+    if (this.syncing) throw new HttpError(409, "reload already in progress");
+    this.syncing = true;
     try {
-      let catalogue: Catalogue;
+      let albums: Map<string, Album>;
       try {
-        catalogue = await loadCatalogue(this.env.MEDIA);
+        albums = await loadAlbums(this.env.MEDIA);
       } catch (e) {
         throw new HttpError(500, `reload failed: ${(e as Error).message}`);
       }
+      const catalogue = new Catalogue([...albums.values()]);
 
       const before = new Set(this.scheduler.catalogue.albums.map((a) => a.id));
       const after = new Set(catalogue.albums.map((a) => a.id));
@@ -404,19 +438,50 @@ export class Station extends DurableObject<Env> {
 
       this.scheduler.catalogue = catalogue;
       this.scheduler.disabled = disabled;
-      await this.ctx.storage.put(DISABLED_KEY, [...disabled]);
+      await Promise.all([
+        this.ctx.storage.put(DISABLED_KEY, [...disabled]),
+        this.storeCatalogue(albums),
+      ]);
 
-      const summary: ReloadSummary = {
+      return {
         albums_before: before.size,
         albums_after: after.size,
         added: [...after].filter((id) => !before.has(id)).length,
         removed: [...before].filter((id) => !after.has(id)).length,
         kept_disabled: disabled.size,
       };
-      console.log("metadata reloaded", summary);
-      return json(summary);
     } finally {
-      this.reloading = false;
+      this.syncing = false;
+    }
+  }
+
+  /**
+   * Mirrors `albums` (keyed by R2 key) into storage, writing only the albums that changed.
+   * `stored` is what storage holds now, if the caller has already listed it.
+   */
+  private async storeCatalogue(
+    albums: Map<string, Album>,
+    stored?: Map<string, Album>,
+  ): Promise<void> {
+    const current =
+      stored ??
+      (await this.ctx.storage.list<Album>({ prefix: CATALOGUE_PREFIX }));
+    const puts = [...albums]
+      .map(([key, album]) => [CATALOGUE_PREFIX + key, album] as const)
+      .filter(
+        ([key, album]) =>
+          JSON.stringify(current.get(key)) !== JSON.stringify(album),
+      );
+    const deletes = [...current.keys()].filter(
+      (key) => !albums.has(key.slice(CATALOGUE_PREFIX.length)),
+    );
+    for (let i = 0; i < puts.length; i += STORAGE_BATCH) {
+      await this.ctx.storage.put(
+        Object.fromEntries(puts.slice(i, i + STORAGE_BATCH)),
+      );
+    }
+    for (let i = 0; i < deletes.length; i += STORAGE_BATCH) {
+      await this.ctx.storage.delete(deletes.slice(i, i + STORAGE_BATCH));
     }
   }
 }

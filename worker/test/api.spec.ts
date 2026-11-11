@@ -1,6 +1,6 @@
 import { abortAllDurableObjects } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type {
   AdminAlbumSummaryResponse,
@@ -237,6 +237,20 @@ describe("admin", () => {
       ["B", false],
       ["C", true],
     ]);
+  });
+
+  it("wakes up from its stored catalogue and catches up with the bucket", async () => {
+    // Metadata that no longer parses must not keep the station from waking up.
+    await env.MEDIA.put("metadata/broken.yaml", "id: [");
+    await abortAllDurableObjects();
+    expect((await get("/api/albums/A")).status).toBe(200);
+    await env.MEDIA.delete("metadata/broken.yaml");
+
+    await env.MEDIA.put("metadata/d.yaml", albumYaml("D", [2]));
+    await abortAllDurableObjects();
+    await vi.waitFor(async () =>
+      expect((await get("/api/albums/D")).status).toBe(200),
+    );
   });
 
   it("keeps serving the old catalogue when a reload fails", async () => {
