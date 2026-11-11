@@ -28,7 +28,7 @@ enabled = true
 
 [[routes]]
 # Refer to https://developers.cloudflare.com/workers/wrangler/configuration/#routes
-pattern = "rosetta.shz.al"
+pattern = "rosetta.sharzy.in"
 custom_domain = true
 
 [[r2_buckets]]
