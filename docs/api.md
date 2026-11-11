@@ -36,7 +36,9 @@ The API is served by the Cloudflare Worker, on the same origin as the web player
 
 ## UTC Timing [/api/utc]
 
-Used as a DASH `UTCTiming` time source. Returns a plain-text `xs:dateTime` body.
+Used as the fallback DASH `UTCTiming` time source (the MPD also carries its generation time
+as a `urn:mpeg:dash:utc:direct:2014` source, which players try first). Returns a plain-text
+`xs:dateTime` body.
 
 ### Get UTC time [GET]
 
@@ -85,6 +87,7 @@ Dynamic DASH MPD with multiple Periods, one per track in the current scheduler w
                  publishTime="2026-01-20T00:00:10.000Z"
                  timeShiftBufferDepth="PT30S"
                  suggestedPresentationDelay="PT10S">
+              <UTCTiming schemeIdUri="urn:mpeg:dash:utc:direct:2014" value="2026-01-20T00:00:10.000Z" />
               <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="/api/utc" />
               <!-- Periods omitted -->
             </MPD>

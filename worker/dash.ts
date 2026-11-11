@@ -147,16 +147,21 @@ export function generateMpd(
   const periodsXml = periods
     .map((p) => periodXml(p, config.mediaBaseUrl))
     .join("\n");
+  const now = new Date(nowMs).toISOString();
 
+  // The clock rides along in the MPD itself (`direct`), so a player can sync without another
+  // round trip before its first segment; `/api/utc` stays as the fallback for players that
+  // skip the direct scheme.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <MPD xmlns="urn:mpeg:dash:schema:mpd:2011"
      type="dynamic"
      availabilityStartTime="${new Date(availabilityStartMs).toISOString()}"
-     publishTime="${new Date(nowMs).toISOString()}"
+     publishTime="${now}"
      minimumUpdatePeriod="PT30S"
      timeShiftBufferDepth="PT${tsbd.toFixed(0)}S"
      suggestedPresentationDelay="PT${spd.toFixed(0)}S"
      minBufferTime="PT2S">
+  <UTCTiming schemeIdUri="urn:mpeg:dash:utc:direct:2014" value="${now}" />
   <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="/api/utc" />
 ${periodsXml}
 </MPD>`;

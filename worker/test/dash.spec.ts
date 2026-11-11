@@ -46,8 +46,9 @@ describe("generateMpd", () => {
     expect(mpd).toContain('publishTime="2026-01-01T01:00:00.000Z"');
     expect(mpd).toContain('timeShiftBufferDepth="PT60S"');
     expect(mpd).toContain('suggestedPresentationDelay="PT30S"');
-    expect(mpd).toContain(
-      '<UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="/api/utc" />',
+    // The direct clock comes first so players sync without another round trip.
+    expect(mpd).toMatch(
+      /<UTCTiming schemeIdUri="urn:mpeg:dash:utc:direct:2014" value="2026-01-01T01:00:00.000Z" \/>\s*<UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="\/api\/utc" \/>/,
     );
   });
 

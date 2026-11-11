@@ -78,6 +78,11 @@ const Player = React.memo(
           utcSynchronization: {
             enabled: true,
             useManifestDateHeaderTimeSource: false,
+            // The MPD carries its clock inline (utc:direct). A background sync after a segment
+            // 404 would re-read the timestamp of the manifest it last synced against, now
+            // stale, and skew the clock by its age; the regular resync on manifest refresh
+            // reads a fresh one.
+            enableBackgroundSyncAfterSegmentDownloadError: false,
           },
           retryAttempts: {
             MPD: 3,
